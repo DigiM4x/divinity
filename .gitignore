@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.vite/
+*.local
+.DS_Store
+
+# Playwright MCP scratch output (snapshots, console logs, screenshots)
+.playwright-mcp/
+
+# The original Kenney archives. Every one of them is already unpacked beside
+# this file - see src/lib/assets/ - so committing both is 28MB of the same
+# bytes twice, and git keeps every version of a binary forever.
+src/lib/assets/_downloads/
