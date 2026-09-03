@@ -587,6 +587,30 @@ export async function loadModels() {
 
   const loadTownPieces = (names) => loadKitPieces('town-kit', names);
 
+  /**
+   * One Cube Pets animal, flattened into a plain static geometry.
+   *
+   * The pets are loaded as animated scenes for the creature; this is the other
+   * thing you might want an animal for - standing still, in a field, instanced
+   * a hundred times. The kit shares ONE colormap across all 24 models, so every
+   * animal used this way costs a single extra material however many species are
+   * on the island.
+   *
+   * Returns { geometry, texture } in the animal's own units - the caller scales
+   * it, exactly like a kit piece.
+   */
+  async function loadPetGeometry(key) {
+    const gltf = await loadPet(key);
+    const data = flatten(gltf.scene);
+    if (!data) throw new Error(`[models] pet "${key}" has no meshes`);
+    if (data.texture) {
+      data.texture.magFilter = THREE.NearestFilter;
+      data.texture.colorSpace = THREE.SRGBColorSpace;
+      data.texture.needsUpdate = true;
+    }
+    return data;
+  }
+
   // --- mini characters ------------------------------------------------------
   const miniUrls = new Map(
     Object.entries(MINI_URLS).map(([path, url]) => [nameFromPath(path), url])
@@ -637,6 +661,7 @@ export async function loadModels() {
     get townTexture() { return KITS['town-kit'].texture; },
     hasPet: (key) => petUrls.has(key),
     loadPet,
+    loadPetGeometry,
     names: [...store.keys()].sort(),
     has: (name) => store.has(name),
     /** Always returns a clone: callers scale and translate their own copy. */

@@ -274,6 +274,14 @@ async function boot() {
     'wall-wood', 'wall-wood-door', 'wall-wood-broken', 'wall-wood-window-small',
     'chimney', 'watermill', 'stall', 'cart', 'planks', 'hedge', 'tree-crooked',
     'banner-red', 'fence',
+    // The paddock. A cattle farm that is a square of fence and nothing else
+    // reads as an empty pen, so it gets a real barn, a way in, and a trough:
+    // a gate in the rail, a gabled roof wide enough to span two bays, and a
+    // high-sided cart for the hay.
+    // `fountain-square` is a low stone basin, and a basin at cattle height is a
+    // water trough - the kit has no trough of its own, and this is the piece it
+    // has that already means "standing water somebody drinks from".
+    'fence-gate', 'roof-gable-end', 'cart-high', 'poles-horizontal', 'fountain-square',
     // Manor: it earns its own pieces. Built from the house's four blank walls it
     // read as a warehouse, and no amount of proportion fixes a building with no
     // windows in it.
@@ -285,6 +293,11 @@ async function boot() {
     // Street furniture for the town squares - see SCENERY.SQUARE.
     ...SCENERY.SQUARE.TOWN.map((p) => p.name)
   ]);
+  // THE CATTLE THEMSELVES, which the paddock has never had. One animal from the
+  // Cube Pets kit, flattened to a static geometry: no mixer, no skinning, one
+  // draw call for every cow on the island. See makeCattleGeo.
+  state.cowModel = await state.models.loadPetGeometry('animal-cow');
+
   state.castlePieces = await state.models.loadKitPieces('castle-kit', [
     'tower-square-base', 'tower-square-mid-door', 'tower-square-mid-windows',
     'tower-square-top', 'tower-square-roof', 'flag',

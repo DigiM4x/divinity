@@ -27,7 +27,7 @@
 import * as THREE from 'three';
 import { mulberry32 } from './lib/noise.js';
 import { applyVertexColor } from './lib/geo.js';
-import { composeParts, sizeToWidth, groundAtOrigin, growInstances} from './lib/models.js';
+import { composeParts, sizeToWidth, sizeToHeight, groundAtOrigin, growInstances} from './lib/models.js';
 import { TOWN, BUILDINGS, WORLD, VILLAGER, ALIGNMENT, COMBAT, ENDING} from './state.js';
 
 /**
@@ -224,14 +224,7 @@ function makeStorageGeo(P) {
   ]);
 }
 
-/**
- * A paddock: fenced pasture with a feed cart and a lean-to.
- *
- * Composed from kit parts for the same reason the crop farm is - there is no
- * cattle-farm model in the town kit - and deliberately built LOW and open, so it
- * reads as pasture next to the hedged, planted look of a crop farm rather than
- * as another shed.
- */
+
 /**
  * A lumber camp: a low hut of planks, a stack of cut timber and a cart.
  *
@@ -253,24 +246,164 @@ function makeLumberGeo(P) {
   return composeParts(parts);
 }
 
+/**
+ * WHERE THE CATTLE STAND, in the paddock's own local units.
+ *
+ * Shared by the pen and the herd so the two can never disagree: the same list
+ * places the animals and is the reason the trough and the gate are where they
+ * are. Kept clear of the barn corner and of the gate itself, because a cow
+ * standing in a doorway reads as a bug rather than as livestock.
+ *
+ * Deliberately irregular. Four cows on a grid facing the same way is a diagram;
+ * a herd is a huddle by the trough, one at the rail and one off on its own.
+ */
+const CATTLE_STANDING = [
+  { x: 0.75, z: 1.95, rotY: -0.30 },   // at the trough
+  { x: 2.10, z: 1.10, rotY: 1.90 },    // ...and one shouldering in beside it
+  { x: 0.30, z: 0.10, rotY: 2.30 },    // out in the middle, facing away
+  { x: 1.85, z: -1.35, rotY: 1.15 },
+  { x: -1.45, z: 0.65, rotY: -1.70 },  // nose at the west rail
+  { x: -0.60, z: -1.30, rotY: 0.40 }   // just out of the barn door
+];
+
+/**
+ * The pen's half-width, in kit modules, and the rail that encloses it.
+ *
+ * MEASURED, not guessed. A `fence` is 1.0 long on Z, 0.38 tall, and its
+ * geometry sits on the +X FACE of its cell (bbox centre x = 0.46) - the same
+ * convention every wall module in this kit uses. So a rail running along Z is
+ * rotY 0 placed half a panel in from the boundary, and one running along X is
+ * rotY +/- 90 degrees. Step by exactly 1.0 and the panels ABUT; the old paddock
+ * stepped by 1.15 and left a 15% gap between every pair, which is why it read
+ * as scattered posts rather than as a fence.
+ */
+const PEN_R = 3.0;
+const PEN_T = [-2.5, -1.5, -0.5, 0.5, 1.5, 2.5];
+const RAIL_INSET = 0.46;
+
+/**
+ * THE PADDOCK. A barn, a fenced yard, a trough, a hay cart - and cattle.
+ *
+ * The old version was four runs of fence around an empty square with a lean-to
+ * and a cart in it, and the honest description of that is "a pen". Nothing in
+ * it said cattle, because THERE WERE NO CATTLE: the town kit has no animal in
+ * it, so the building had been standing in for livestock with a fence since the
+ * day it was added.
+ *
+ * The animals come from the Cube Pets kit instead - `animal-cow`, flattened to
+ * a static geometry - which means they cannot live in this merged geometry at
+ * all: the town kit and the pets kit are different texture atlases, and a cow
+ * merged in here would sample the town colormap and come out as garbage. So the
+ * herd is a SECOND instanced mesh riding the same instance matrices; see
+ * `makeHerdGeo` and the sync in `update`.
+ *
+ * What this function builds is everything the cattle need to be standing in.
+ */
 function makeCattleGeo(P) {
   const parts = [];
-  const R = 2.2;
-  const N = 4;
-  // Four runs of fence around an open square, with one side left as the gate.
-  for (let i = 0; i < N; i++) {
-    const t = (i - (N - 1) / 2) * 1.15;
-    parts.push({ geo: P.get('fence'), x: R, z: t, rotY: HALF_PI });
-    parts.push({ geo: P.get('fence'), x: -R, z: t, rotY: HALF_PI });
-    parts.push({ geo: P.get('fence'), x: t, z: -R, rotY: 0 });
-    // The near side is the way in, so only its outer posts are fenced.
-    if (i === 0 || i === N - 1) parts.push({ geo: P.get('fence'), x: t, z: R, rotY: 0 });
+  const R = PEN_R;
+  const IN = RAIL_INSET;
+
+  // --- the yard ------------------------------------------------------------
+  // A CONTINUOUS rail on all four sides, with a real gate hung in the front of
+  // it. The old paddock left its near side simply open, which reads as a fence
+  // somebody never finished rather than as a way in.
+  for (const t of PEN_T) {
+    parts.push({ geo: P.get('fence'), x: R - IN, z: t, rotY: 0 });        // east
+    parts.push({ geo: P.get('fence'), x: -R + IN, z: t, rotY: Math.PI }); // west
+    // The back rail runs the whole way. Breaking it where the barn stands read
+    // as a fence with a hole in it and a barn sitting OUTSIDE the pen - the
+    // opposite of the intended "barn built into the corner". A rail that
+    // disappears behind a wall is fine; a gap beside one is not.
+    parts.push({ geo: P.get('fence'), x: t, z: -R + IN, rotY: -HALF_PI });
+    // The front, with the gate in the middle of the run.
+    const front = Math.abs(t) < 0.6 ? 'fence-gate' : 'fence';
+    parts.push({ geo: P.get(front), x: t, z: R - IN, rotY: HALF_PI });
   }
-  // A lean-to in one corner and a feed cart in the middle: something for the
-  // eye to land on, so the paddock does not read as an empty pen.
-  parts.push({ geo: P.get('planks'), x: -1.2, z: -1.2, y: 0, rotY: 0 });
-  parts.push({ geo: P.get('stall'), x: -1.3, z: -1.3, y: 0, rotY: HALF_PI });
-  parts.push({ geo: P.get('cart'), x: 0.9, z: 0.7, rotY: -0.6 });
+
+  // --- the barn ------------------------------------------------------------
+  // TWO BAYS WIDE, which is the whole difference between a barn and a hut: a
+  // 1x1 with a pyramid roof is a house, and the paddock had one of those
+  // pretending to be a shelter. A long low silhouette is the shape a byre is.
+  //
+  // The kit's walls are 1x1 modules whose geometry sits on the +X FACE of the
+  // cell (measured: 0.1 x 1 x 1, centred at x = 0.45), so rotY puts a wall on
+  // whichever face you ask for. Same convention as `walls()` above.
+  // Set just inside the back-left corner, standing against the rail.
+  const bx = -2.0;
+  const bz = -2.15;
+  for (const dx of [0, 1]) {
+    const x = bx + dx;
+    parts.push(
+      // The doorway faces INTO the yard, so the animals have somewhere to go.
+      { geo: P.get(dx === 0 ? 'wall-wood-door' : 'wall-wood'), x, z: bz, rotY: HALF_PI },
+      { geo: P.get('wall-wood'), x, z: bz, rotY: -HALF_PI },
+      // Only the OUTER end of each bay is walled; the join between them is open,
+      // which is what makes it one barn rather than two sheds in a row.
+      { geo: P.get('wall-wood'), x, z: bz, rotY: dx === 0 ? Math.PI : 0 },
+      // ...and each bay is capped, so the ridge closes at both ends. The end
+      // caps used to sit a cell BEYOND the barn - two roof slabs hanging in the
+      // air over nothing, which is exactly what the first screenshot showed.
+      { geo: P.get('roof-gable-end'), x, z: bz, y: 1, rotY: dx === 0 ? Math.PI : 0 }
+    );
+  }
+
+  // --- the feed ------------------------------------------------------------
+  // A trough along the rail, where the herd is standing. `stall` rather than
+  // `planks`: planks are a flat 1x1 slab, which lying on the grass reads as a
+  // dropped board, and a trough needs sides.
+  // The `stall` I tried first is a MARKET stall - canopy and counter - and two
+  // of them in a field read as a village fete rather than a farm. A low stone
+  // basin is what an animal drinks from.
+  //
+  // 0.45, not 0.85. A fountain module is a full 1x1 basin, and at eight tenths
+  // it filled a quarter of the yard and read as an ornamental pond - the cattle
+  // looked like they were standing round a village water feature. Half size is
+  // a trough two animals can get their heads into.
+  parts.push({ geo: P.get('fountain-square'), x: 1.35, z: 1.95, rotY: 0, scale: 0.45 });
+  // The hay cart, high-sided, drawn up against the rail where a cart would be
+  // left rather than in the middle of the yard where the animals are.
+  parts.push({ geo: P.get('cart-high'), x: -1.85, z: 1.95, rotY: -0.35, scale: 0.8 });
+  // A hay rack propped against the barn: the yard's working clutter, and the
+  // reason the corner beside the door is not empty.
+  parts.push({ geo: P.get('poles-horizontal'), x: -0.35, z: -2.15, rotY: 0, scale: 0.75 });
+
+  return composeParts(parts);
+}
+
+/**
+ * The herd, in the same local space as the paddock above.
+ *
+ * A separate geometry rather than more parts, because the cow comes from the
+ * Cube Pets atlas and the paddock comes from the town-kit atlas - merging them
+ * would give one of them the other's texture. Both are transformed by the SAME
+ * fit, so they land on top of each other; see `fitTogether`.
+ */
+function makeHerdGeo(cow, rand) {
+  if (!cow) return null;
+  // SIZED BY HEIGHT, AGAINST THE FENCE IT STANDS BEHIND.
+  //
+  // The first version used `sizeToWidth(0.95)`, and the kit's fence is 1.0 long
+  // but only 0.38 TALL - so the cows came out three times the height of the
+  // rail and bigger than the barn. Width is the wrong axis for an animal;
+  // measure the thing you can compare it to.
+  //
+  // 0.5 local units against a 0.38 rail: shoulder a little above the top bar,
+  // which is what a cow looks like leaning over a fence.
+  const base = cow.clone();
+  sizeToHeight(base, 0.5);
+  base.computeBoundingBox();
+  const foot = base.boundingBox.min.y;
+
+  const parts = CATTLE_STANDING.map((c) => ({
+    geo: base,
+    x: c.x, z: c.z,
+    y: -foot,                       // stand them on the ground, not in it
+    rotY: c.rotY,
+    // Not identical animals. A little variation in size reads as a herd; none
+    // reads as one cow stamped five times, which is exactly what it is.
+    scale: 0.88 + rand() * 0.24
+  }));
   return composeParts(parts);
 }
 
@@ -377,6 +510,41 @@ export function initTown(state) {
   /** Scale a composed building to a world footprint and stand it on the ground. */
   const fit = (geo, width) => groundAtOrigin(sizeToWidth(geo, width));
 
+  /**
+   * Fit a building AND a passenger geometry through the identical transform.
+   *
+   * `fit` measures the geometry it is scaling, which is exactly wrong for the
+   * paddock's herd: the cows are a separate geometry in a different texture
+   * atlas, and fitting them on their own bounding box would size them to the
+   * building's footprint - five cows the size of a barn. They have to ride the
+   * transform the PEN was fitted by, so the numbers are taken from the pen once
+   * and applied to both.
+   *
+   * Returns the passenger; the main geometry is fitted in place.
+   */
+  function fitTogether(main, passenger, width) {
+    main.computeBoundingBox();
+    let b = main.boundingBox;
+    const w = Math.max(b.max.x - b.min.x, b.max.z - b.min.z);
+    const k = w > 0 ? width / w : 1;
+    main.scale(k, k, k);
+    main.computeBoundingBox();
+    b = main.boundingBox;
+    const dx = -(b.min.x + b.max.x) / 2;
+    const dy = -b.min.y;
+    const dz = -(b.min.z + b.max.z) / 2;
+    main.translate(dx, dy, dz);
+    main.computeBoundingBox();
+    main.computeBoundingSphere();
+    if (passenger) {
+      passenger.scale(k, k, k);
+      passenger.translate(dx, dy, dz);
+      passenger.computeBoundingBox();
+      passenger.computeBoundingSphere();
+    }
+    return passenger;
+  }
+
   // Two silhouettes per type where it reads: good and evil. Farms and storage
   // keep one shape and change by tint alone, which is exactly the "recolour,
   // and swap variants only where it counts" split.
@@ -392,13 +560,18 @@ export function initTown(state) {
     house: fit(makeHouseGeo(P, false), 7.0),
     manor: fit(makeManorGeo(P, false), 10.8),
     farm: fit(makeFarmGeo(P), 12.2),
-    cattle: fit(makeCattleGeo(P), 13.0),
+    cattle: makeCattleGeo(P),
     lumber: fit(makeLumberGeo(P), 8.4),
     mine: fit(makeMineGeo(P), 8.1),
     storage: fit(makeStorageGeo(P), 6.8),
     workshop: fit(makeWorkshopGeo(P, false), 8.1),
     barracks: fit(makeBarracksGeo(P), 11.9)
   };
+  // The paddock and its herd, fitted through one transform so the animals stand
+  // where the pen puts them. Done after the table because both halves have to
+  // exist before either can be measured.
+  const herdGeo = fitTogether(geos.cattle, makeHerdGeo(state.cowModel?.geometry, rand), 13.0);
+
   const evilGeos = {
     house: fit(makeHouseGeo(P, true), 7.0),
     manor: fit(makeManorGeo(P, true), 10.8),
@@ -424,6 +597,57 @@ export function initTown(state) {
     const tint = new Float32Array(CAPACITY * 3).fill(1);
     meshes[key].instanceColor = new THREE.InstancedBufferAttribute(tint, 3);
     meshes[key].instanceColor.setUsage(THREE.DynamicDrawUsage);
+  }
+
+  /**
+   * THE HERD. A second instanced mesh riding the paddock's own matrices.
+   *
+   * It cannot be part of `meshes.cattle` - different texture atlas - and it must
+   * not keep its own bookkeeping either, or the day a paddock is demolished the
+   * cows are left standing in the field. So it holds NO state of its own: every
+   * sync copies the cattle mesh's instance matrices wholesale, and the herd is
+   * therefore incapable of disagreeing with the pens.
+   *
+   * Not lit by the banner tint. Whoever owns the farm, a cow is brown.
+   */
+  const herdMesh = herdGeo
+    ? new THREE.InstancedMesh(
+      herdGeo,
+      new THREE.MeshStandardMaterial({
+        map: state.cowModel.texture, roughness: 0.92, metalness: 0.0
+      }),
+      CAPACITY)
+    : null;
+  if (herdMesh) {
+    herdMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    herdMesh.castShadow = true;
+    herdMesh.receiveShadow = true;
+    herdMesh.frustumCulled = false;
+    herdMesh.count = 0;
+    herdMesh.name = 'building_cattle_herd';
+    state.scene.add(herdMesh);
+  }
+
+  /**
+   * Copy the paddocks' matrices onto the herd.
+   *
+   * Flag-driven rather than every frame: `needsUpdate` on an instance matrix
+   * re-uploads the WHOLE buffer, and this project has already been bitten once
+   * by sending five megabytes a frame to move twenty-five vertices.
+   */
+  let herd = herdMesh;
+  let herdDirty = true;
+  function syncHerd() {
+    if (!herd || !herdDirty) return;
+    herdDirty = false;
+    const src = meshes.cattle;
+    const n = src.count;
+    // The cattle mesh grows on demand; the herd has to grow with it, or the
+    // paddocks past the old capacity quietly have no animals in them.
+    while (n > herd.instanceMatrix.count) herd = growInstances(herd, state.scene);
+    herd.instanceMatrix.array.set(src.instanceMatrix.array.subarray(0, n * 16), 0);
+    herd.count = n;
+    herd.instanceMatrix.needsUpdate = true;
   }
 
   // --- castle: one InstancedMesh, so every town's centre is one draw call ---
@@ -802,6 +1026,8 @@ export function initTown(state) {
     mesh.count = index + 1;
     mesh.instanceMatrix.needsUpdate = true;
     mesh.instanceColor.needsUpdate = true;
+    // The herd rides these same matrices; tell it they moved.
+    if (def.cattle) herdDirty = true;
 
     for (const p of state.props.list) {
       if (p.dead || p.harvested) continue;
@@ -862,6 +1088,11 @@ export function initTown(state) {
     mesh.count = last;
     mesh.instanceMatrix.needsUpdate = true;
     mesh.instanceColor.needsUpdate = true;
+    // Demolishing a paddock has to take its cattle with it. This is the exact
+    // case the herd holds no state of its own for: the slot swap above moves
+    // some OTHER paddock into this index, and a herd keeping its own list would
+    // now be one animal-cluster out of step for the rest of the game.
+    if (b.def.cattle) herdDirty = true;
 
     const ti = b.town.buildings.indexOf(b);
     if (ti >= 0) b.town.buildings.splice(ti, 1);
@@ -1599,6 +1830,7 @@ export function initTown(state) {
 
   function update(dt) {
     updatePlacement();
+    syncHerd();
     terrain.setInfluenceRings(
       towns.map((t) => ({ centre: t.centre, radius: t.influenceRadius, colour: t.colour })),
       1

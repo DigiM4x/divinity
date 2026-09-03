@@ -498,3 +498,79 @@ zero with history at its bounded ceiling.
 - **Barren Ground is terrain-dependent** by design, and on a generous island it
   correctly never fires. That is right, but it does mean a player may go several
   games without meeting it.
+
+
+---
+
+## Addendum — the cattle farm has cattle in it
+
+Asked for after playing: *"redesign the cattle farm and make it look like a
+cattle farm."* Fair. Here is the honest description of what was there:
+
+> four runs of fence around an empty square, with a lean-to and a cart in it
+
+Nothing in that says cattle, and the reason is embarrassing once you see it:
+**there were no cattle.** The town kit has no animal in it, so the building had
+been standing in for livestock with a fence since the day it was added.
+
+### Where a cow comes from
+
+`animal-cow` — from the Cube Pets kit, the same twenty-four models the creature
+picks from, flattened to a static geometry. No mixer, no skinning.
+
+That immediately rules out putting them in the building. The town kit and the
+pets kit are **different texture atlases**, and a cow merged into the paddock's
+geometry would sample the town colormap and come out as garbage. So the herd is
+a second instanced mesh riding the paddock's own instance matrices:
+
+> It holds **no state of its own.** Every sync copies the cattle mesh's matrices
+> wholesale, so the herd is incapable of disagreeing with the pens — including
+> on the demolish path, where the last slot is swapped down into the freed one
+> and a herd keeping its own list would be one cluster out of step forever.
+
+One extra draw call for every cow on the island.
+
+### Four passes, each one a screenshot
+
+I could not reason my way to this. Every version had to be looked at.
+
+**v1 — the cows were bigger than the barn.** I sized them with
+`sizeToWidth(0.95)`, and the kit's fence is 1.0 long but only **0.38 tall**, so
+they came out at nearly three times the height of the rail. Width is the wrong
+axis for an animal: measure the thing it stands next to. `sizeToHeight(0.5)`.
+
+**v1 — two roof slabs hanging in the air.** I put the gable end caps a cell
+*beyond* the barn instead of on its end bays. They roofed nothing.
+
+**v2 — the fence was scattered posts.** Panels are 1.0 long and the old paddock
+stepped them by **1.15**, leaving a 15% gap between every pair and open corners.
+This is what measuring the pieces fixed rather than guessing at them:
+
+> A `fence` is 1.0 on Z, 0.38 tall, and its geometry sits on the **+X face** of
+> its cell (bbox centre x = 0.46) — the convention every wall module in this kit
+> uses. A rail along Z is `rotY 0` placed half a panel in; one along X is
+> `rotY ±90°`. Step by exactly 1.0 and they abut.
+
+**v3 — the barn looked like it was outside the pen.** I had broken the back rail
+where the barn stood, and a gap *beside* a wall reads as a hole in the fence. A
+rail that disappears behind a building is fine; run it the whole way.
+
+**v4 — the trough was a village water feature.** The kit has no trough, so I
+used `fountain-square`, which is exactly right — a low stone basin is what an
+animal drinks from — at exactly the wrong size. At 0.85 it filled a quarter of
+the yard. At **0.45** two cows can get their heads in it. (The version before
+that used `stall`, which is a *market* stall, canopy and all. Two of them in a
+field read as a village fete.)
+
+### What it is now
+
+A **two-bay barn** with a gabled roof and the door facing into the yard — long
+and low, which is the difference between a byre and a hut. A **continuous rail**
+on all four sides with a **gate** hung in the front of it. A **water trough**, a
+**hay cart** drawn up against the fence, a hay rack by the barn door — and
+**six cows**, at irregular angles and slightly irregular sizes, because four
+animals on a grid facing the same way is a diagram and a herd is a huddle.
+
+Verified at scale: 31 paddocks built, the herd mesh grew 24 → 48 alongside the
+pens, three demolished from the middle, and **zero matrix mismatches** between
+pens and cattle afterwards. 127 draw calls, nothing over budget.
