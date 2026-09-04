@@ -4,7 +4,7 @@
 //
 // Publishes state.ui: { update, toast, setDebugVisible, toggleBuildMenu }
 // ---------------------------------------------------------------------------
-import { BUILDINGS, MIRACLES, TRAITS, CREATURE_TRAITS, PET_TEMPERAMENT, COMBAT} from './state.js';
+import { BUILDINGS, MIRACLES, TRAITS, CREATURE_TRAITS, PET_TEMPERAMENT, COMBAT, LEASH_MODES, CREATURE} from './state.js';
 
 const CSS = `
 #hud .panel {
@@ -452,6 +452,89 @@ const CSS = `
 }
 #hud .prayerdetail .close:hover { opacity: 1; color: #ffe9b8; }
 
+/* --- the creature -----------------------------------------------------------
+   Bottom-centre-left: the strip between the controls panel and the build hint,
+   which is the one piece of the frame nothing else wanted. Near where the eye
+   already is while you are commanding the animal.
+
+   BUILT ONCE AND THEN ONLY MEASURED. Every bar width is set as an inline style
+   on a cached element rather than by rewriting innerHTML, because rewriting it
+   would destroy and recreate the nodes every frame - which costs layout and,
+   more to the point, throws away the CSS transitions that do all the animation
+   here for free. */
+#hud .beast {
+  bottom: 16px; left: 332px; width: 244px; padding: 9px 12px 10px;
+  font-variant-numeric: tabular-nums;
+  transition: opacity 0.2s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
+#hud .beast.gone { opacity: 0; pointer-events: none; }
+/* At war the whole panel takes the warning colour. One cue, not five. */
+#hud .beast.war {
+  border-color: rgba(255,157,138,0.55);
+  box-shadow: 0 8px 26px rgba(0,0,0,0.35), 0 0 18px rgba(255,110,90,0.20);
+}
+#hud .beast .hd { display: flex; align-items: baseline; gap: 8px; margin-bottom: 7px; }
+#hud .beast .nm {
+  font-size: 12.5px; color: #fff3d9; letter-spacing: 0.16em; text-transform: uppercase;
+}
+#hud .beast .tr {
+  font-size: 9.5px; opacity: 0.45; letter-spacing: 0.08em; margin-left: auto;
+  text-align: right; line-height: 1.25;
+}
+
+/* A bar is a track, a ghost that lags behind it, and the fill itself. The
+   ghost is what makes a hit read as a hit: the fill snaps down, the ghost
+   drains after it a beat later. */
+#hud .beast .bar {
+  position: relative; height: 9px; border-radius: 3px; margin-bottom: 3px;
+  background: rgba(255,255,255,0.09);
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.45);
+  overflow: hidden;
+}
+#hud .beast .bar i, #hud .beast .bar u {
+  position: absolute; inset: 0 auto 0 0; display: block; border-radius: 3px;
+}
+#hud .beast .bar u {                     /* the ghost */
+  background: rgba(255,120,100,0.45);
+  transition: width 0.55s cubic-bezier(.4,0,.2,1) 0.22s;
+}
+#hud .beast .bar i {                     /* the fill */
+  transition: width 0.18s cubic-bezier(.4,0,.2,1), background-color 0.4s ease;
+  box-shadow: 0 0 8px currentColor;
+}
+/* Notches, so a bar reads as a gauge rather than a smear of colour. */
+#hud .beast .bar::after {
+  content: ''; position: absolute; inset: 0; border-radius: 3px; pointer-events: none;
+  background: repeating-linear-gradient(90deg,
+    rgba(0,0,0,0) 0 11px, rgba(0,0,0,0.34) 11px 12px);
+}
+#hud .beast .lg {
+  display: flex; justify-content: space-between; gap: 8px;
+  font-size: 9px; letter-spacing: 0.13em; text-transform: uppercase;
+  opacity: 0.5; margin: 0 1px 6px;
+}
+#hud .beast .lg .v { opacity: 0.95; color: #efe9dd; letter-spacing: 0.06em; }
+
+#hud .beast .ft {
+  display: flex; align-items: center; gap: 7px; margin-top: 8px;
+  padding-top: 7px; border-top: 1px solid rgba(255,255,255,0.10);
+  font-size: 10px;
+}
+#hud .beast .leash { display: flex; align-items: center; gap: 5px; opacity: 0.75; }
+#hud .beast .pip { width: 7px; height: 7px; border-radius: 50%; flex: none; box-shadow: 0 0 7px currentColor; }
+#hud .beast .st { margin-left: auto; letter-spacing: 0.11em; text-transform: uppercase; font-size: 9px; }
+#hud .beast .st.hot { color: #ff9d8a; animation: beastpulse 1.1s ease-in-out infinite; }
+#hud .beast .st.cold { color: #8fb0d8; }
+#hud .beast .st.calm { opacity: 0.45; }
+@keyframes beastpulse { 0%,100% { opacity: 1; } 50% { opacity: 0.42; } }
+/* Under a third of its health the bar itself breathes. The colour already says
+   "bad"; this says "now". */
+#hud .beast .bar i.crit { animation: beastcrit 0.85s ease-in-out infinite; }
+@keyframes beastcrit {
+  0%,100% { box-shadow: 0 0 8px currentColor; }
+  50%     { box-shadow: 0 0 16px currentColor, 0 0 26px currentColor; }
+}
+
 /* --- placement banner --- */
 #hud .placing {
   bottom: 84px; left: 50%; transform: translateX(-50%);
@@ -505,6 +588,7 @@ export function initUi(state) {
     <div class="panel buildbar" id="hud-buildbar">
       <div class="hint">Press <b>B</b> to build</div>
     </div>
+    <div class="panel beast" id="hud-beast"></div>
     <div class="panel placing" id="hud-placing"></div>
     <div class="panel sculpt" id="hud-sculpt"></div>
     <div class="panel mind hidden" id="hud-mind"></div>
@@ -1210,7 +1294,122 @@ export function initUi(state) {
     });
   }
 
+  // --- the creature panel ---------------------------------------------------
+  //
+  // Health, stamina and how well fed it is, plus what it is doing about any of
+  // that. The three things the player can actually act on: feed it, rest it,
+  // pull it out of a fight.
+  //
+  // The DOM is built ONCE. Rewriting innerHTML each frame would recreate every
+  // node, which throws away the CSS transitions that do all the animation here
+  // - the lagging ghost bar in particular exists entirely because the element
+  // survives from one frame to the next.
+  const elBeast = document.getElementById('hud-beast');
+  let beastDom = null;
+  let beastTimer = 0;
+
+  function buildBeastDom() {
+    elBeast.innerHTML =
+      `<div class="hd"><span class="nm" id="b-nm">&mdash;</span>` +
+      `<span class="tr" id="b-tr"></span></div>` +
+      `<div class="bar"><u id="b-hp-g"></u><i id="b-hp"></i></div>` +
+      `<div class="lg"><span>Health</span><span class="v" id="b-hp-n"></span></div>` +
+      `<div class="bar"><i id="b-st"></i></div>` +
+      `<div class="lg"><span>Stamina</span><span class="v" id="b-st-n"></span></div>` +
+      `<div class="bar"><i id="b-fd"></i></div>` +
+      `<div class="lg"><span>Fed</span><span class="v" id="b-fd-n"></span></div>` +
+      `<div class="ft"><span class="leash"><span class="pip" id="b-pip"></span>` +
+      `<span id="b-leash"></span></span><span class="st" id="b-state"></span></div>`;
+    const id = (k) => document.getElementById(k);
+    beastDom = {
+      nm: id('b-nm'), tr: id('b-tr'),
+      hp: id('b-hp'), hpGhost: id('b-hp-g'), hpNum: id('b-hp-n'),
+      st: id('b-st'), stNum: id('b-st-n'),
+      fd: id('b-fd'), fdNum: id('b-fd-n'),
+      pip: id('b-pip'), leash: id('b-leash'), state: id('b-state')
+    };
+  }
+
+  /** What the animal is doing, in two words, most alarming first. */
+  function beastState(c) {
+    if (!c.inField) return ['Driven off', 'cold'];
+    if (c.atWar) return ['In the fight', 'hot'];
+    if (c.health < c.maxHealth * 0.5) return ['Hurt', 'hot'];
+    if (c.carrying) return [`Hauling ${c.carrying.type}`, 'calm'];
+    const d = c.action?.desire;
+    if (d === 'sleep') return ['Sleeping', 'calm'];
+    if (d === 'eat') return ['Feeding', 'calm'];
+    if (d === 'impress') return ['Performing', 'calm'];
+    if (d === 'attack') return ['Hunting', 'hot'];
+    if (d === 'help') return ['Working', 'calm'];
+    if (d === 'play') return ['Playing', 'calm'];
+    if (d === 'groom') return ['Grooming', 'calm'];
+    return ['At ease', 'calm'];
+  }
+
+  function renderBeast(dt) {
+    const c = state.creature;
+    // Nothing to show before it hatches, or once the match is over and the
+    // results screen owns the frame.
+    const show = !!c && !!c.animal && !state.outcome;
+    elBeast.classList.toggle('gone', !show);
+    if (!show) return;
+    if (!beastDom) buildBeastDom();
+
+    // Ten times a second. Health and stamina move slowly and the CSS carries
+    // the motion between updates, so there is nothing to gain from doing this
+    // on the frame.
+    beastTimer -= dt;
+    if (beastTimer > 0) return;
+    beastTimer = 0.1;
+
+    const b = beastDom;
+    const hpFrac = Math.max(0, Math.min(1, c.health / c.maxHealth));
+    const stam = Math.max(0, Math.min(1, c.needs.energy));
+    const fed = Math.max(0, Math.min(1, 1 - c.needs.hunger));
+
+    // Health takes the colour of how bad it is: green, amber, red.
+    const hpCol = hpFrac > 0.6 ? '#9be08a' : hpFrac > 0.3 ? '#ffc98a' : '#ff8a72';
+    b.hp.style.width = `${hpFrac * 100}%`;
+    b.hp.style.background = hpCol;
+    b.hp.style.color = hpCol;                 // drives the bar's own glow
+    b.hp.classList.toggle('crit', hpFrac <= 0.3);
+    b.hpGhost.style.width = `${hpFrac * 100}%`;
+    b.hpNum.textContent = `${c.health.toFixed(0)} / ${c.maxHealth}`;
+
+    b.st.style.width = `${stam * 100}%`;
+    b.st.style.background = '#8fd8ff';
+    b.st.style.color = '#8fd8ff';
+    b.stNum.textContent = `${Math.round(stam * 100)}%`;
+
+    const fedCol = fed > 0.35 ? '#ffe9b8' : '#ff9d8a';
+    b.fd.style.width = `${fed * 100}%`;
+    b.fd.style.background = fedCol;
+    b.fd.style.color = fedCol;
+    b.fdNum.textContent = fed < 0.18 ? 'starving' : `${Math.round(fed * 100)}%`;
+
+    // Name, species and the two traits it was born with - the reason it fights
+    // and learns the way it does, so it belongs on the same panel as the bars.
+    const species = (c.animal || '').replace(/^animal-/, '');
+    const grown = Math.round(((c.scale - CREATURE.START_SCALE)
+      / (CREATURE.MAX_SCALE - CREATURE.START_SCALE)) * 100);
+    b.nm.textContent = species || 'creature';
+    b.tr.innerHTML = `${c.temperamentLabels.join(' &middot; ')}<br>grown ${grown}%`;
+
+    const mode = LEASH_MODES[c.leash];
+    b.pip.style.background = '#' + (mode?.color ?? 0xffffff).toString(16).padStart(6, '0');
+    b.pip.style.color = b.pip.style.background;
+    b.leash.textContent = mode?.label ?? c.leash;
+
+    const [word, tone] = beastState(c);
+    b.state.textContent = word;
+    b.state.className = `st ${tone}`;
+    elBeast.classList.toggle('war', c.atWar || !c.inField);
+  }
+
   function update(dt) {
+    renderBeast(dt);
+
     // --- sculpting readout ---
     const sc = state.sculpt;
     elSculpt.classList.toggle('on', !!sc?.active);

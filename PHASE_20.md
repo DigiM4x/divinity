@@ -978,3 +978,56 @@ food, wood and ore reads correctly, builds clean, and does nothing: miracles.js
 initialises *after* town.js and opens with `state.resources.belief = 0`. Belief
 is miracles.js's to own, so the constant belongs where the assignment is. The
 test caught it - opening belief came back as 0.118 instead of 500.
+
+
+---
+
+## Addendum — a panel for the beast
+
+*"Need a UI for the creature with HP and stamina. Make it cool."*
+
+Everything about the animal was either invisible or buried in the debug panel.
+Its health only existed as a number you could not see, and stamina - `energy` -
+drove whether it would work, fight or lie down, with nothing on screen saying so.
+
+### What it shows
+
+Bottom-centre-left, in the strip between the controls and the build hint, which
+was the one piece of the frame nothing else wanted and is near where the eye
+already is while you are commanding it.
+
+| | |
+|---|---|
+| **Health** | green above 60%, amber to 30%, red below - and the bar itself breathes when it is under a third |
+| **Stamina** | `needs.energy`, in the pale blue the Leash of Learning uses |
+| **Fed** | `1 - hunger`, gold, turning red under 35% and reading **starving** under 18% |
+| Species and its two born traits | the reason it fights and learns the way it does |
+| How grown it is | `scale` between START_SCALE and MAX_SCALE, as a percentage |
+| The leash | with a pip in that leash's own colour |
+| What it is doing | *In the fight, Hurt, Hauling wood, Sleeping, Performing, Driven off…* |
+
+The whole panel takes a warning border and a red glow while it is at war or has
+been driven off the field. One cue for "something is happening to your animal",
+not five.
+
+### The bit that makes it feel like a game
+
+**A damage tail.** Each bar is a track, a *ghost*, and the fill. On a hit the
+fill snaps down in 180ms and the ghost drains after it - 220ms later, over
+550ms - so a blow reads as a red tail bleeding away rather than a number
+changing. Verified rather than assumed: 320ms after an 11-point hit the fill
+measured **179px against the ghost's 219px**, and a second later both sat at 179.
+
+It costs nothing, because it is entirely CSS. Which is the whole reason for the
+one rule this panel is built on:
+
+> **Built once, then only measured.**
+
+Every bar width is an inline style on a cached element. Rewriting `innerHTML`
+each frame - which is how every other panel here works, and is fine for them -
+would recreate the nodes and throw the transitions away, so the ghost would
+never lag and the bars would jump. The refresh is 10Hz; the CSS carries the
+motion in between.
+
+The bars are also notched, with a repeating gradient, so they read as gauges
+rather than smears of colour.
