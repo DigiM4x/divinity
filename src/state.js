@@ -292,6 +292,22 @@ export const CIVS = {
    */
   SPACING: { 2: 260, 3: 230, 4: 195, 5: 165 },
 
+  /**
+   * People the island can hold, per civilisation on it.
+   *
+   * The cap is ISLAND-WIDE - one pool every town draws from - so a fixed number
+   * means the more gods there are, the smaller each of their nations can be. At
+   * five civs the old flat 150 worked out at thirty people each, and a soak
+   * ended with three towns permanently at the ceiling.
+   *
+   * FLOORED at the old value so small games are exactly as they were, and
+   * CEILINGED because this number is the size of a dozen instanced buffers and
+   * the per-tick cost of every villager mind on the island.
+   */
+  POP_PER_CIV: 60,
+  POP_FLOOR: 150,
+  POP_CEILING: 320,
+
   /** Shown on the picker. */
   LABELS: {
     2: 'You and one rival',
@@ -1923,6 +1939,19 @@ export const BUILDINGS = {
 };
 
 export const VILLAGER = {
+  /**
+   * HOW MANY PEOPLE THE WHOLE ISLAND CAN HOLD - every civilisation together,
+   * not each.
+   *
+   * Written by `setCivilisations`, because 150 shared between five gods is
+   * thirty each and a thirty-person civilisation stops feeling like one. It was
+   * a fine number when the island had three towns on it and only one of them
+   * was being played.
+   *
+   * See CIVS.POP_PER_CIV for the arithmetic. This is the value the instanced
+   * meshes are sized to, so it must be settled before initVillagers runs -
+   * which it is: the picker resolves at boot, long before any system is built.
+   */
   MAX: 150,
   /**
    * Villagers are drawn larger than life. At true scale against 11-unit trees
@@ -3509,6 +3538,7 @@ export function endGame(state, kind, reason) {
  *   ISLANDS.SITES_NEEDED  how many the island is vetted for
  *   TOWN.TOWN_SPACING     how far apart town.js will place them
  *   ISLANDS.SITE_SPACING  how far apart the check believes they need to be
+ *   VILLAGER.MAX          how many people the island can hold in total
  *
  * Letting any one of them lag is the Phase 12 regression exactly: an island
  * vetted for three towns that then has to host five does not fail loudly, it
@@ -3522,12 +3552,19 @@ export function setCivilisations(n) {
   TOWN.TOWN_SPACING = spacing;
   ISLANDS.SITES_NEEDED = count;
   ISLANDS.SITE_SPACING = spacing;
+  // ...and how many people the island can hold. A FIFTH number moved by the one
+  // the player chose, and it belongs here for the reason the other four do: the
+  // cap is island-wide, so leaving it fixed means every extra civilisation
+  // makes all of them smaller.
+  const pop = Math.max(CIVS.POP_FLOOR,
+    Math.min(CIVS.POP_CEILING, CIVS.POP_PER_CIV * count));
+  VILLAGER.MAX = pop;
   // Returned AND recorded, because a dynamic `import()` from the page gives a
   // separate module instance from the running app's graph - so reading
   // `TOWN.TOWN_SPACING` in a console test reports the untouched default and
   // quietly says the setting never applied. Anything verifying this has to
   // read it back off the live state, so put it there.
-  return { count, spacing, sitesNeeded: count };
+  return { count, spacing, sitesNeeded: count, villagerCap: pop };
 }
 
 export function createEvents() {

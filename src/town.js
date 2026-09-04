@@ -1175,10 +1175,24 @@ export function initTown(state) {
     town.happiness += (Math.max(TOWN.MIN_HAPPINESS, raw) - town.happiness) * 0.15;
   }
 
-  /** What is currently preventing a birth in this town, or null. */
+  /**
+   * What is currently preventing a birth in this town, or null.
+   *
+   * THE CAP IS THE ISLAND'S, NOT THE TOWN'S, and reading it wrong was a real
+   * cost. `villagers.spawn` refuses once the WHOLE island holds VILLAGER.MAX,
+   * but this asked whether THIS TOWN had reached it - so a town of thirty on a
+   * full island answered "nothing is stopping you", paid GROWTH_FOOD_COST,
+   * called `spawn`, got null back, and announced a birth that never happened.
+   * Every fourteen seconds. Forever.
+   *
+   * Measured over thirty minutes: 534 births announced, 225 deaths, and 150
+   * people alive - about 159 of those births were phantoms, and roughly 1,900
+   * food went with them. It also inflated the reckoning's birth statistic,
+   * because `villager-born` fired for each one.
+   */
   function growthBlocker(town) {
     const pop = population(town);
-    if (pop >= VILLAGER.MAX) return 'cap';
+    if ((state.villagers?.list?.length ?? 0) >= VILLAGER.MAX) return 'cap';
     if (housingCapacity(town) - pop <= 0) return 'housing';
     if (town.resources.food - TOWN.GROWTH_FOOD_RESERVE < TOWN.GROWTH_FOOD_COST) return 'food';
     return null;
@@ -1798,14 +1812,22 @@ export function initTown(state) {
       if (town.growthTimer <= 0) {
         town.growthTimer = TOWN.GROWTH_INTERVAL;
         if (!growthBlocker(town)) {
-          town.resources.food -= TOWN.GROWTH_FOOD_COST;
-          state.villagers?.spawn(town.centre.x, town.centre.z, town);
-          // Emitted for EVERY town, not just yours. Gating it on `isPlayer`
-          // made the `first-birth` Legacy milestone unearnable by an AI, which
-          // quietly contradicted Phase 17's claim that every team is judged on
-          // the same terms. Listeners that only care about your people filter
-          // by town themselves - see achievements.js.
-          state.events?.emit('villager-born', { pos: town.centre });
+          // PAY FOR WHAT ARRIVED, and announce only that. The old order paid
+          // first and announced regardless of whether `spawn` gave anything
+          // back, which is how a full island quietly burned food on children
+          // that were never born. `growthBlocker` now knows about the island's
+          // ceiling, so this should never refuse - and if it ever does again,
+          // it costs nothing and says nothing.
+          const born = state.villagers?.spawn(town.centre.x, town.centre.z, town);
+          if (born) {
+            town.resources.food -= TOWN.GROWTH_FOOD_COST;
+            // Emitted for EVERY town, not just yours. Gating it on `isPlayer`
+            // made the `first-birth` Legacy milestone unearnable by an AI, which
+            // quietly contradicted Phase 17's claim that every team is judged on
+            // the same terms. Listeners that only care about your people filter
+            // by town themselves - see achievements.js.
+            state.events?.emit('villager-born', { pos: town.centre });
+          }
         }
       }
 

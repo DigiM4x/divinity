@@ -687,3 +687,81 @@ any keep — by the bulk of a **fully grown** creature rather than its bulk toda
 because an order that quietly stops working twenty minutes after you gave it is
 worse than one that was never accepted. It resolved to 14.6 and the creature
 obeyed it without sticking.
+
+
+---
+
+## Addendum — the phantom births
+
+Reported after playing: *"citizens are reproducing fast enough."* I have read
+that as **"aren't"** - say the word if you meant it the other way and I will put
+the ceiling back where it was. Either way there was a real bug underneath, and
+it cost food.
+
+### The town asked the wrong question
+
+`villagers.spawn` refuses once **the whole island** holds `VILLAGER.MAX` people.
+`growthBlocker` asked whether **this town** had reached it.
+
+So on a full island a town of thirty answered "nothing is stopping you", paid
+`GROWTH_FOOD_COST`, called `spawn`, got `null` back, and announced a birth that
+never happened. Every fourteen seconds. Forever.
+
+A thirty-minute soak, before:
+
+| | |
+|---|---:|
+| Births announced | 534 |
+| Deaths | 225 |
+| People actually alive | **150** |
+
+534 − 225 = 309 net against 150 real, so roughly **159 of those births were
+phantoms** - and about 1,900 food went with them. It also inflated the
+reckoning's birth statistic, because `villager-born` fired for each one.
+
+The order was wrong as well as the test: it paid first and announced regardless
+of what `spawn` gave back. Now it pays for what actually arrived, so if this
+ever refuses again it costs nothing and says nothing.
+
+### And the ceiling was one number for any number of gods
+
+`VILLAGER.MAX` was a flat 150 - **island-wide**, every town drawing from one
+pool. That was a fine number when there were three towns and only one of them
+was being played. Split five ways it is thirty people each, and a
+thirty-person civilisation does not feel like one.
+
+It is the fifth number `setCivilisations` writes, for the same reason as the
+other four: leaving it fixed means every extra civilisation quietly makes all of
+them smaller.
+
+| civs | cap |
+|---:|---:|
+| 2 | 150 *(floored - small games are exactly as they were)* |
+| 3 | 180 |
+| 4 | 240 |
+| 5 | 300 |
+
+Ceilinged at 320, because this number is the size of a dozen instanced buffers
+and the per-tick cost of every villager mind on the island.
+
+### Result
+
+Thirty minutes, five gods, same seed:
+
+| | before | after |
+|---|---|---|
+| Island population | 150 by minute 22, then flat | **34 → 263, still climbing** |
+| Biggest town | 76 | **89** |
+| Births vs deaths vs alive | 534 / 225 / 150 — *does not reconcile* | 619 / 390 / 263 — **exact** |
+| Sim cost | 0.26 ms/tick | **0.34 ms/tick** |
+
+263 villagers cost a third of a millisecond in a fifty-millisecond tick. The
+reckoning still validates.
+
+### Left alone deliberately
+
+`TOWN.GROWTH_INTERVAL` is still 14 seconds **per town**, regardless of how many
+people are in it - so growth is linear, not compounding, and a town of eighty
+gains people no faster than a town of eight. That may well be the next thing to
+look at if it still feels slow, but it is a much bigger balance lever than the
+cap and nothing in the measurements said it was wrong.
