@@ -2869,6 +2869,26 @@ export const MIRACLE = {
   MAX_BELIEF: 999,
 
   /**
+   * BELIEF IN HAND AT THE FIRST SECOND.
+   *
+   * It used to be nothing, and belief only trickles in from a happy population
+   * at about fifteen a minute - so the opening of a god game was several
+   * minutes of watching a bar fill before the player could work a single
+   * miracle. The four cost 20, 30, 45 and 55, which put the first Water about
+   * ninety seconds away and the first Fireball closer to four minutes.
+   *
+   * 500 is enough to BE a god from the first second - a dozen or so miracles -
+   * without being enough to coast on: the trickle still matters and MAX_BELIEF
+   * is still somewhere to climb to.
+   *
+   * It lives here rather than beside START_FOOD because belief is miracles.js's
+   * to own, and miracles.js initialises AFTER town.js and zeroed it. Seeding it
+   * in town.js looked right, built clean, and was silently overwritten a few
+   * lines later.
+   */
+  START_BELIEF: 500,
+
+  /**
    * WITNESSED MIRACLES. A wonder nobody sees is a wonder wasted.
    *
    * Belief has only ever trickled in from a happy population, which made the
@@ -3187,6 +3207,32 @@ export const COMBAT = {
    * with a monster has an army somewhere.
    */
   CAPTURE_NEEDS_A_SOLDIER: true,
+
+  /**
+   * HOW TALL THE PLATOON BANNER STANDS.
+   *
+   * It was 7, which is exactly the width of a house and about their height - so
+   * in a town of any size the one object the player has to be able to find was
+   * the same size as the forty objects around it, and a manor (10.8) or a
+   * barracks (11.9) simply stood in front of it.
+   *
+   * 13 clears every building on the island except the castle, which is 21 and
+   * is meant to dominate. Sized against the things beside it rather than
+   * against the scene - the mistake this project has made with the barracks and
+   * with a lantern, and this is the same one a third time.
+   */
+  MARKER_HEIGHT: 13,
+
+  /**
+   * ...and the radius of the ring drawn on the ground beneath it.
+   *
+   * Height alone does not solve this. A pole tall enough to see over the roofs
+   * is still hidden by the keep from half the angles this game is played at, so
+   * the banner also gets a mark that CANNOT be occluded - the same
+   * depth-test-off trick prayermarks.js uses, and for the identical reason:
+   * "a marker is an affordance, not scenery".
+   */
+  MARKER_RING: 5.2,
 
   /** Attackers needed inside the walls to force a surrender once breached. */
   CAPTURE_ATTACKERS: 3,

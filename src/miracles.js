@@ -153,7 +153,10 @@ export function initMiracles(state) {
   }
 
   // --- belief ---------------------------------------------------------------
-  state.resources.belief = 0;
+  // The player opens with a working god's worth of it. See MIRACLE.START_BELIEF
+  // - and note this assignment is why the constant lives there and not in TOWN:
+  // miracles.js initialises after town.js, so anything town.js set is gone.
+  state.resources.belief = MIRACLE.START_BELIEF;
 
   // --- casting --------------------------------------------------------------
   //

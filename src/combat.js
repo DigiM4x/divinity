@@ -74,7 +74,7 @@ export function initCombat(state) {
   // A banner the player physically picks up and plants. Grabbing it is handled
   // here rather than through props.js so it can never be thrown into the sea.
   const markerGeo = groundAtOrigin(
-    sizeToHeight(state.castlePieces.get('flag').clone(), 7)
+    sizeToHeight(state.castlePieces.get('flag').clone(), COMBAT.MARKER_HEIGHT)
   );
   const marker = new THREE.Mesh(
     markerGeo,
@@ -98,12 +98,42 @@ export function initCombat(state) {
    * them. Raycasting a solid proxy instead makes it reliably grabbable - the
    * same trick the creature uses for petting.
    */
+  // Derived from the height rather than written twice: the grab volume and the
+  // flag have to be the same size, and a literal here is a bug waiting for the
+  // next time somebody resizes the banner.
+  const hitW = COMBAT.MARKER_HEIGHT * 0.49;
   const markerHit = new THREE.Mesh(
-    new THREE.BoxGeometry(3.4, 7.2, 3.4),
+    new THREE.BoxGeometry(hitW, COMBAT.MARKER_HEIGHT * 1.03, hitW),
     new THREE.MeshBasicMaterial({ visible: false })
   );
-  markerHit.position.y = 3.6;
+  markerHit.position.y = COMBAT.MARKER_HEIGHT * 0.51;
   marker.add(markerHit);
+
+  /**
+   * A ring on the ground under the banner, drawn THROUGH everything.
+   *
+   * Making the pole taller is only half the answer - a crowded town still hides
+   * it behind the keep from half the angles this game is played at. This is the
+   * same depth-test-off mark prayermarks.js uses, for the reason it gives:
+   * a marker is an affordance, not scenery, and one you cannot find is one you
+   * do not have.
+   *
+   * Deliberately a flat ring rather than a second flag: it says WHERE without
+   * adding another silhouette to a skyline that is already busy.
+   */
+  const markerRingGeo = new THREE.RingGeometry(
+    COMBAT.MARKER_RING * 0.78, COMBAT.MARKER_RING, 40);
+  markerRingGeo.rotateX(-Math.PI / 2);
+  const markerRing = new THREE.Mesh(
+    markerRingGeo,
+    new THREE.MeshBasicMaterial({
+      color: 0xffd98a, transparent: true, opacity: 0.75,
+      depthWrite: false, depthTest: false, side: THREE.DoubleSide
+    })
+  );
+  markerRing.renderOrder = 7;
+  markerRing.frustumCulled = false;
+  state.scene.add(markerRing);
 
   /** Where the platoon is ordered to stand. */
   const rally = new THREE.Vector3();
@@ -116,6 +146,8 @@ export function initCombat(state) {
   function placeMarker(x, z) {
     rally.set(x, terrain.heightAt(x, z), z);
     marker.position.copy(rally);
+    // Lifted a little, or it z-fights the grass it is lying on.
+    markerRing.position.set(rally.x, rally.y + 0.35, rally.z);
     markerPlaced = true;
   }
 
@@ -1182,6 +1214,10 @@ export function initCombat(state) {
 
     // The banner bobs and turns so it reads as a live object worth grabbing.
     marker.rotation.y += dt * 0.6;
+    // A slow pulse, so the eye finds it in a crowd without it shouting.
+    const beat = 0.62 + Math.sin(state.time * 2.2) * 0.16;
+    markerRing.material.opacity = markerPlaced ? beat : beat * 0.5;
+    markerRing.position.set(marker.position.x, marker.position.y + 0.35, marker.position.z);
     syncRender(alpha);
   }
 

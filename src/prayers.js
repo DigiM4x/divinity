@@ -391,11 +391,32 @@ export function initPrayers(state) {
     return null;
   }
 
-  /** Where a prayer is, for markers, the creature and distance checks. */
+  /** The middle of a town's fields, or null if it has none. */
+  function fieldsOf(town) {
+    let n = 0, x = 0, z = 0;
+    for (const b of town.buildings) {
+      if (!b.def.farm) continue;
+      n++; x += b.pos.x; z += b.pos.z;
+    }
+    return n ? { x: x / n, y: town.centre.y, z: z / n } : null;
+  }
+
+  /**
+   * Where a prayer is, for markers, the creature and distance checks.
+   *
+   * A COMMUNAL PRAYER IS NOT ALWAYS ABOUT THE SQUARE. `thirst` asks for water
+   * "over the fields themselves" and the marker used to hover over the keep,
+   * which is both the wrong instruction and - because `match` measures from
+   * here - the wrong place to answer it.
+   */
   function prayerPos(p) {
     if (p.villagerId != null) {
       const v = villagerById(p.villagerId);
       if (v?.alive) return v.pos;
+    }
+    if (p.category === 'thirst') {
+      const f = fieldsOf(p.town);
+      if (f) return f;
     }
     return p.town.centre;
   }
@@ -772,9 +793,30 @@ export function initPrayers(state) {
       answer(w, 'player', 'they saw your hand');
     }
     if (e.def?.key === 'water') {
-      const t = match('thirst', e.pos, null);
-      if (t && claim(`mir:${++eventSeq}`)) {
-        answer(t, 'player', 'you watered their fields');
+      // ANSWERED BY WATERING A FIELD, not by watering the square.
+      //
+      // `match` measures from the prayer's position and allows ANSWER_RADIUS
+      // (34). The water miracle only reaches farms within WATER_RADIUS (22) of
+      // where it falls, and a town's farms sit anywhere from the centre
+      // clearance (20) out to its influence radius (60 to 120). So the cast
+      // that actually does the mechanical work - water on the crops - was
+      // almost always too far from the town centre to count, and the one that
+      // counted did nothing for the fields. Doing what the prayer asked for
+      // could not answer it.
+      //
+      // So this asks the question the prayer is actually about: did the rain
+      // fall on any of their fields?
+      let hit = null;
+      for (const p of active) {
+        if (p.category !== 'thirst') continue;
+        for (const b of p.town.buildings) {
+          if (!b.def.farm) continue;
+          if (near(b.pos, e.pos, PRAYER.ANSWER_RADIUS)) { hit = p; break; }
+        }
+        if (hit) break;
+      }
+      if (hit && claim(`mir:${++eventSeq}`)) {
+        answer(hit, 'player', 'you watered their fields');
       }
     }
   });

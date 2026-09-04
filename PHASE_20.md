@@ -896,3 +896,85 @@ which is what it should have been all along.
 And the starving one worked through **`eat/boulder` 218 and `eat/tree` 330**
 before it touched anybody. It eats the scenery first. It turns on your people
 last, and only if you have let it get that far.
+
+
+---
+
+## Addendum — three from one session
+
+### The battle flag was house-sized
+
+*"The battle flag needs to be bigger, when it gets real populated I can't see
+it."*
+
+It was `sizeToHeight(flag, 7)`. A house is 7 wide and about as tall, a manor is
+10.8 and a barracks 11.9 - so the one object the player must be able to find was
+the same size as the forty objects around it, and any decent building simply
+stood in front of it.
+
+**13 now**, which clears every building on the island except the castle (21,
+and meant to dominate). Sized against the things beside it rather than against
+the scene - the mistake this project has now made with the barracks, with a
+lantern, and with a cow, and this is the fourth time.
+
+Height alone is not the fix, though. A pole tall enough to see over the roofs is
+still hidden by the keep from half the angles this game is played at, so the
+banner also gets **a ring on the ground drawn through everything** - the same
+`depthTest: false` mark prayermarks.js uses, for the reason it gives:
+
+> a marker is an affordance, not scenery
+
+It pulses slowly so the eye finds it in a crowd without it shouting, and it is a
+flat ring rather than a second flag because it needs to say WHERE without adding
+another silhouette to a busy skyline. The grab volume is now derived from the
+height instead of written twice, so the next person to resize the banner cannot
+leave the invisible handle behind.
+
+### Watering the fields did nothing
+
+*"Raining the fields with water does nothing for the prayers."*
+
+Right, and the arithmetic says why in one line. The Parched Fields prayer asks
+for *"water, over the fields themselves"*. It was matched by
+`near(prayerPos(p), pos, ANSWER_RADIUS)`, and `prayerPos` for a communal prayer
+is **the town centre**.
+
+| | |
+|---|---:|
+| Water miracle reaches farms within | **22** of where it falls |
+| Prayer matched a cast within | **34 of the keep** |
+| Farms actually sit | **20 to 120** from the keep |
+
+So the cast that does the mechanical work - water on the crops - was almost
+always too far from the centre to count, and the cast that counted did nothing
+for the fields. **Doing exactly what the prayer asked for could not answer it.**
+
+Two fixes, and the first is the one that matters:
+
+- the prayer is answered if the water falls on **any of that town's farms**,
+  which is the question it was always about;
+- and its marker now hovers over the fields rather than the keep, so the game
+  points at the place it wants you to cast.
+
+Proven on a farm **62 units** from the keep - a distance the old rule could
+never have matched - which now answers, with the crop going 0.1 to 0.8.
+
+### A god with nothing to spend
+
+*"Start the game with 500 belief."*
+
+It started at zero, and belief only trickles in from a happy population at about
+fifteen a minute. The four miracles cost 20, 30, 45 and 55, so the opening of a
+god game was ninety seconds before you could do anything at all and closer to
+four minutes before you could do anything dramatic.
+
+`MIRACLE.START_BELIEF` is 500 - a dozen or so miracles, enough to *be* a god
+from the first second, and not enough to coast on: the trickle still matters and
+the 999 ceiling is still somewhere to climb to.
+
+**It lives in MIRACLE and not beside START_FOOD**, and that is worth writing
+down because I put it in the wrong place first. Seeding it in town.js next to
+food, wood and ore reads correctly, builds clean, and does nothing: miracles.js
+initialises *after* town.js and opens with `state.resources.belief = 0`. Belief
+is miracles.js's to own, so the constant belongs where the assignment is. The
+test caught it - opening belief came back as 0.118 instead of 500.
