@@ -1318,6 +1318,9 @@ export function initUi(state) {
             `<span class="pp">${state.town.populationOf(t)}</span></div>`;
           if (t.owner === 0) {
             h += `<div class="lbl2 won">${t.index === 0 ? 'your seat' : 'joined you'}</div>`;
+            if (t.breached) {
+              h += `<div class="lbl2" style="color:#ff9d8a">wall breached &mdash; it will not be rebuilt</div>`;
+            }
             if (t.besiegedBy > 0) {
               h += `<div class="lbl2" style="color:#ffb86b">besieged by ${t.besiegedBy}</div>`;
             }
@@ -1330,7 +1333,12 @@ export function initUi(state) {
             h += `<div class="track"><span class="fill" style="width:${pct}%;background:#ffe9b8"></span></div>` +
                  `<div class="lbl2">awe ${pct}%</div>` +
                  `<div class="track"><span class="fill" style="width:${wall}%;background:#ff9d8a"></span></div>` +
-                 `<div class="lbl2">wall ${wall}% &middot; ${def} defending` +
+                 // A breach is permanent, so it is worth a word rather than a
+                 // "0%" the player has to know the rules to read. See
+                 // COMBAT.WALL_REGEN.
+                 `<div class="lbl2">` +
+                 (t.breached ? `<span style="color:#ff9d8a">breached</span>` : `wall ${wall}%`) +
+                 ` &middot; ${def} defending` +
                  (t.besiegedBy > 0 ? ` &middot; <span style="color:#ffb86b">besieged</span>` : '') +
                  `</div>`;
           }

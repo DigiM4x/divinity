@@ -459,6 +459,22 @@ export const MODES = {
  */
 export const CREATURE_GROWN_SCALE = 2.2;
 
+/**
+ * A curtain wall at full height, for turning `town.wallHp` into a fraction.
+ *
+ * MIRRORS COMBAT.WALL_HP, and it is spelled out here because this file is the
+ * only thing reckoning.js is allowed to import - it observes the world and
+ * imports no gameplay system, which is the whole reason its numbers live in
+ * one place.
+ *
+ * A duplicated constant is a hazard, and this one has already been bitten:
+ * `gather` divided by a hard-coded 900 while the wall has maxed out at 120,
+ * so `wallFrac` - a value the code and its own name say runs 0..1 - could never
+ * exceed 0.133. Walls were scoring an eighth of what they were designed to in
+ * both Military and Stability. IF COMBAT.WALL_HP MOVES, MOVE THIS.
+ */
+export const WALL_FULL = 120;
+
 export const MODE = 'endless';
 
 /**

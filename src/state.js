@@ -3168,7 +3168,23 @@ export const COMBAT = {
 
   /** Attackers needed inside the walls to force a surrender once breached. */
   CAPTURE_ATTACKERS: 3,
-  /** Walls slowly rebuild if the siege is abandoned. */
+  /**
+   * Walls slowly rebuild if the siege is abandoned - UP TO THE FIRST BREACH.
+   *
+   * Damage repairs; a breach does not. Once the wall has actually been brought
+   * to zero the town is open for the rest of the match, and `town.breached`
+   * says so permanently.
+   *
+   * This is the difference between a siege that costs something and one that
+   * does not. At 1.5/s a 120-point wall is whole again in eighty seconds, so an
+   * army that broke through, was beaten off, and came back found the same wall
+   * waiting - and nothing an attacker ever did left a mark. The breach is now
+   * the thing you are fighting for, and it is worth fighting for because it is
+   * permanent.
+   *
+   * Capture does not mend it either. Taking a town does not hand you an intact
+   * fortress; it hands you the ruin you made of one.
+   */
   WALL_REGEN: 1.5,
 
   /**

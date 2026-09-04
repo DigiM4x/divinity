@@ -774,6 +774,14 @@ export function initTown(state) {
       centreSlot: -1,
       /** Curtain wall integrity. Must be breached before the town can be taken. */
       wallHp: COMBAT.WALL_HP,
+      /**
+       * ONCE BROKEN, BROKEN FOR GOOD.
+       *
+       * Set the first time the wall reaches zero and never cleared - not by
+       * time, not by the siege lifting, not by the town changing hands. See
+       * COMBAT.WALL_REGEN.
+       */
+      breached: false,
       besiegedBy: 0
     };
   }
@@ -1548,7 +1556,10 @@ export function initTown(state) {
     }
     town.resources = pool;
 
-    town.wallHp = COMBAT.WALL_HP;
+    // The wall is NOT mended by the change of hands. Taking a town does not
+    // hand you an intact fortress, it hands you the ruin you made of one - and
+    // restoring it here would have undone the whole point of a permanent
+    // breach, since every town worth taking has been breached by definition.
     town.besiegedBy = 0;
     state.fx?.burst(town.centre, 40, how === 'conquest' ? 0xe0553f : 0xffe9b8);
     // `byPlayer` is spelled out rather than left to listeners to work out from
@@ -1831,7 +1842,8 @@ export function initTown(state) {
         }
       }
 
-      if (town.besiegedBy === 0 && town.wallHp < COMBAT.WALL_HP) {
+      // Masons work on a cracked wall. Nobody rebuilds a breached one.
+      if (!town.breached && town.besiegedBy === 0 && town.wallHp < COMBAT.WALL_HP) {
         town.wallHp = Math.min(COMBAT.WALL_HP, town.wallHp + COMBAT.WALL_REGEN * dt);
       }
       if (town.isPlayer) {

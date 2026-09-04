@@ -320,7 +320,7 @@ export function initReckoning(state) {
       }
       if (town.buildings.length >= CFG.DEVELOPED_BUILDINGS) g.developed++;
       g.happinessSum += town.happiness ?? 0;
-      g.wallFrac += clamp((town.wallHp ?? 0) / 900, 0, 1);
+      g.wallFrac += clamp((town.wallHp ?? 0) / CFG.WALL_FULL, 0, 1);
       if ((town.besiegedBy ?? 0) > 0) g.besieged++;
       g.territory += (town.influenceRadius ?? 0) ** 2;
       g.housing += state.town?.housingCapacityOf?.(town) ?? 0;

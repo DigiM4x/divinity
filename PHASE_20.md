@@ -765,3 +765,65 @@ people are in it - so growth is linear, not compounding, and a town of eighty
 gains people no faster than a town of eight. That may well be the next thing to
 look at if it still feels slow, but it is a much bigger balance lever than the
 cap and nothing in the measurements said it was wrong.
+
+
+---
+
+## Addendum — a breach is permanent
+
+Asked for after playing: *"once it is breached they are done playing the game."*
+
+Walls rebuilt at `WALL_REGEN` 1.5/s whenever the siege lifted, so a 120-point
+wall was whole again in eighty seconds. An army that broke through, was beaten
+off and came back found the same wall waiting. **Nothing an attacker ever did
+left a mark**, which made a siege something you could only win in one
+uninterrupted go and made losing one cost nothing at all.
+
+`town.breached` latches the first time the wall reaches zero and is never
+cleared - not by time, not by the siege lifting, and **not by the town changing
+hands.** That last one is the important half: `capture` used to set
+`wallHp = WALL_HP`, which would have undone the whole thing, since every town
+worth taking has been breached by definition. Taking a town does not hand you an
+intact fortress. It hands you the ruin you made of one.
+
+Damage still repairs. Masons work on a cracked wall; nobody rebuilds a breached
+one. So the breach is the thing you are fighting for, and it is worth fighting
+for because it is the only part that lasts.
+
+### What it did to the game
+
+I expected churn - a town with no wall is a town anyone can walk into - and got
+the opposite. Two forty-minute five-god soaks:
+
+| | seed 5150 | seed 31337 |
+|---|---:|---:|
+| Towns breached | 4 | 2 |
+| Captures in 40 minutes | 5 | **2** |
+| Towns still holding an intact wall at the end | 1 | 2 |
+
+Sieges became **rarer and decisive** rather than frequent and reversible,
+because `CAPTURE_GRACE`, `CAPTURE_NEEDS_A_SOLDIER` and the garrison test all
+still stand between a breach and a capture. And a breach is not instant death:
+the player's capital was opened at 899s and did not actually fall until 1439s -
+**nine minutes** to hold the gap.
+
+Both matches were won by the god whose walls never broke, taking towns off gods
+whose had. That is a better story than either soak told before.
+
+### One thing this turned up
+
+With walls permanent they are worth scoring properly, and they were not:
+
+```js
+g.wallFrac += clamp((town.wallHp ?? 0) / 900, 0, 1);
+```
+
+The wall maxes at **120**. So `wallFrac` - a value the code and its own name say
+runs 0 to 1 - could never exceed **0.133**, and walls contributed an eighth of
+what they were designed to in both Military and Stability. A stale literal from
+back when `WALL_HP` was a bigger number.
+
+It is `CFG.WALL_FULL` now. reckoning.js may import no gameplay system - that is
+its whole contract - so the value is mirrored in scoreconfig.js with a note
+saying, in capitals, to move it if `COMBAT.WALL_HP` moves. A duplicated constant
+is a hazard; this is the one that already bit.

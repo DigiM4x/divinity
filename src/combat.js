@@ -634,7 +634,8 @@ export function initCombat(state) {
     const dy = Math.atan2(target.centre.x - e.pos.x, target.centre.z - e.pos.z) - e.yaw;
     e.yaw += Math.atan2(Math.sin(dy), Math.cos(dy)) * Math.min(1, 6 * dt);
     target.wallHp = Math.max(0, target.wallHp - COMBAT.ENGINE_SIEGE_DPS * dt);
-    if (target.wallHp === 0) {
+    if (target.wallHp === 0 && !target.breached) {
+      target.breached = true;          // for good. See COMBAT.WALL_REGEN.
       state.fx?.burst(target.centre, 30, 0xb08d63);
       state.debug.lastLog = target.name + "'s wall is broken by siege";
       if (e.town.isPlayer) state.ui?.toast(target.name + "'s wall is broken");
@@ -967,7 +968,8 @@ export function initCombat(state) {
 
     if (town.wallHp > 0) {
       town.wallHp = Math.max(0, town.wallHp - attackers * COMBAT.SIEGE_DPS * dt);
-      if (town.wallHp === 0) {
+      if (town.wallHp === 0 && !town.breached) {
+        town.breached = true;          // for good. See COMBAT.WALL_REGEN.
         state.fx?.burst(town.centre, 30, 0xb08d63);
         state.debug.lastLog = town.name + "'s wall is breached";
         state.ui?.toast(town.name + "'s wall is breached");
