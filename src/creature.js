@@ -173,6 +173,25 @@ export function initCreature(state, opts = {}) {
   /** True if this town answers to some other god. The one hostility test here. */
   const enemyTown = (t) => !!t && t.owner !== faction;
 
+  /**
+   * IS THIS POINT INSIDE A KEEP, as far as THIS creature is concerned?
+   *
+   * A castle is solid and a creature is pushed out of it by its own bulk, so
+   * anything standing inside one is a thing the animal can walk at forever
+   * without reaching. Props are the case that actually happens: `foundTown`
+   * flattens the ground and drops a castle on it, but it does not clear the
+   * trees and rocks that were already there the way `place` does for every
+   * other building - so a boulder can end up sitting in the middle of a keep,
+   * and a creature that decides to eat it is stuck at the wall for good.
+   *
+   * A soak found one at 14.6 from a castle - its exact solid radius - in the
+   * `approach` phase for 308 seconds.
+   */
+  function inKeep(p) {
+    const solid = state.town?.pushOutOfCentres?.(p.x, p.z, scale * CREATURE.BODY_RADIUS);
+    return !!solid?.hit;
+  }
+
   const group = new THREE.Group();
   state.scene.add(group);
 
@@ -263,10 +282,30 @@ export function initCreature(state, opts = {}) {
     ringMat.opacity = opacity;
   }
 
-  /** Order the creature to a place. radius <= 0 uses the minimum. */
+  /**
+   * Order the creature to a place. radius <= 0 uses the minimum.
+   *
+   * THE SPOT IS PUSHED OUT OF ANY KEEP FIRST, because a castle is solid and an
+   * order to stand inside one cannot be obeyed. Right-drag a small circle onto
+   * a castle and the beast walks at the wall, is pushed back, and keeps trying:
+   * `strayDistance` never falls under SUMMON_SLACK, so the summoned action is
+   * recreated every tick and the animal stands there for the rest of the match.
+   * A soak caught exactly that - 233 seconds motionless, 12.2 from the player's
+   * own keep.
+   *
+   * Pushed by the bulk of a FULLY GROWN creature rather than its bulk today.
+   * The circle it is pushed out of widens as the animal grows, so a spot that
+   * was reachable at hatching becomes unreachable at maturity - and an order
+   * that quietly stops working twenty minutes after you gave it is worse than
+   * one that was never accepted.
+   */
   function summon(x, z, radius) {
     const r = clamp(radius || 0, CREATURE.SUMMON_MIN_RADIUS, CREATURE.SUMMON_MAX_RADIUS);
-    summons = { pos: new THREE.Vector3(x, terrain.heightAt(x, z), z), radius: r };
+    const clear = state.town?.pushOutOfCentres?.(
+      x, z, CREATURE.MAX_SCALE * CREATURE.BODY_RADIUS);
+    const sx = clear ? clear.x : x;
+    const sz = clear ? clear.z : z;
+    summons = { pos: new THREE.Vector3(sx, terrain.heightAt(sx, sz), sz), radius: r };
     say(`told to hold ${r < CREATURE.SUMMON_MIN_RADIUS * 1.5 ? 'this spot' : 'this ground'}`);
   }
 
@@ -735,6 +774,7 @@ export function initCreature(state, opts = {}) {
       if (p.dead || p.harvested || p.held) continue;
       const d2 = (p.pos.x - pos.x) ** 2 + (p.pos.z - pos.z) ** 2;
       if (d2 > R2) continue;
+      if (inKeep(p.pos)) continue;      // buried in a castle; unreachable
       // Felled timber is worth flagging: the creature much prefers it.
       const loose = p.kind === 'tree' && !state.props.isPlanted(p);
       out.push({ kind: 'prop', type: p.kind, ref: p, pos: p.pos, d2, loose });
@@ -842,7 +882,27 @@ export function initCreature(state, opts = {}) {
     if (state.time - lastHitAt < CREATURE.WAR_PROVOKED) return true;
     // Its own god's war, not the player's. `warFront` is the banner, which only
     // one god in the game has a hand to plant.
-    return !!state.combat?.frontFor?.(faction);
+    const front = state.combat?.frontFor?.(faction);
+    if (!front) return false;
+
+    // A SUMMONS OUTRANKS THE WAR - and this is what makes that true.
+    //
+    // simStep has said so in a comment since the summons existed, and the
+    // ordering there does hold: the war branch will not clobber a summoned
+    // action. What neither of them stopped was the TUG OF WAR. Outside its
+    // circle the summons pulled it back; once inside, the war took over and
+    // marched it toward a front on the far side of the island; a step later it
+    // was outside its circle again. A soak caught one alternating 89 ticks
+    // summoned against 111 at war over ten seconds, shuffling on the spot.
+    //
+    // So a summoned creature fights what comes to IT. Anything further off than
+    // its circle plus the usual war leash is not its business while it is under
+    // orders - which is also exactly what you want when you post it somewhere.
+    if (summons) {
+      const d = Math.hypot(front.x - summons.pos.x, front.z - summons.pos.z);
+      if (d > summons.radius + CREATURE.WAR_LEASH) return false;
+    }
+    return true;
   }
 
   /**
@@ -855,12 +915,88 @@ export function initCreature(state, opts = {}) {
   function beastNear() {
     const R2 = CREATURE.HEAL_BLOCK_RANGE * CREATURE.HEAL_BLOCK_RANGE;
     for (const c of state.creatures) {
-      if (c === api || c.faction === faction || !c.inField || c.peaceful) continue;
+      // `fighting` rather than `inField`, and that difference is a deadlock.
+      //
+      // `inField` only means alive and not routed - it is true of an animal
+      // that has broken off and is standing there bleeding. So two beaten
+      // creatures near the same keep each blocked the OTHER from healing,
+      // neither could reach WAR_REJOIN, neither had any reason to move, and
+      // both stood at the castle for the rest of the match. A soak found one
+      // motionless for eleven minutes on 0.2 health.
+      //
+      // You cannot bind your wounds with a lion standing over you. You can bind
+      // them next to a lion that is also lying down.
+      if (c === api || c.faction === faction || !c.fighting) continue;
       const dx = c.position.x - pos.x;
       const dz = c.position.z - pos.z;
       if (dx * dx + dz * dz <= R2) return true;
     }
     return false;
+  }
+
+  /**
+   * WHERE A HURT ANIMAL GOES. Beside its own keep, not into it.
+   *
+   * This used to be `homeTown().centre` with a stop distance of ARRIVE_DIST -
+   * and the middle of a castle is SOLID. So the retreat was a walk into a wall:
+   * `walkToward` correctly reported "blocked and getting no closer, so this is
+   * as near as I will ever be", the creature stopped dead against the stone,
+   * and every retreating animal on the island converged on the same few metres
+   * of masonry. It got worse as they grew, because a bigger beast is pushed
+   * further out - a full-grown one parks 14.6 from a centre it is aiming at.
+   *
+   * So the target is a point it can actually occupy: clear of the keep by its
+   * own bulk plus a margin. And if something is still standing over it, the
+   * bearing is AWAY from that rather than whatever side it happens to be on -
+   * which is what makes this a retreat rather than a shuffle.
+   */
+  const _retreat = { x: 0, z: 0 };
+  function retreatSpot() {
+    const home = homeTown()?.centre ?? null;
+
+    // The nearest thing still actually fighting, which is what it is backing
+    // away from.
+    let threat = null;
+    let bestD2 = Infinity;
+    for (const c of state.creatures) {
+      if (c === api || c.faction === faction || !c.fighting) continue;
+      const d2 = (c.position.x - pos.x) ** 2 + (c.position.z - pos.z) ** 2;
+      if (d2 < bestD2) { bestD2 = d2; threat = c; }
+    }
+
+    // A GOD WITH NO LAND STILL HAS A CREATURE, and a faction driven off the
+    // island has no `homeTown` at all. This used to return null, and the
+    // retreat branch answers null by setting speed to 0 - so the animal stood
+    // in a field for the rest of the match. With nothing to run from and
+    // nowhere to run to, there is no retreat to make: hand it back to the
+    // ordinary mind, which will find it something to eat.
+    if (!home) {
+      if (!threat) return null;
+      // There IS something on it - put ground between them, measured from a
+      // FIXED point. Anchoring on `pos` would move the target every tick and
+      // walk it off the edge of the world one step at a time.
+      const dx = pos.x - threat.position.x;
+      const dz = pos.z - threat.position.z;
+      const d = Math.hypot(dx, dz) || 1;
+      const out = CREATURE.HEAL_BLOCK_RANGE + CREATURE.LAIR_MARGIN;
+      _retreat.x = threat.position.x + (dx / d) * out;
+      _retreat.z = threat.position.z + (dz / d) * out;
+      return _retreat;
+    }
+
+    // Home, but BESIDE the keep rather than inside it - and on the far side
+    // from whatever is still standing over it.
+    const fx = threat ? home.x - threat.position.x : pos.x - home.x;
+    const fz = threat ? home.z - threat.position.z : pos.z - home.z;
+    const d = Math.hypot(fx, fz);
+    // Dead centre has no bearing to take; any one will do. Same guard, and the
+    // same reason, as `pushOutOfCentres`.
+    const ux = d < 1e-4 ? 1 : fx / d;
+    const uz = d < 1e-4 ? 0 : fz / d;
+    const out = TOWN.CENTRE_SOLID + scale * CREATURE.BODY_RADIUS + CREATURE.LAIR_MARGIN;
+    _retreat.x = home.x + ux * out;
+    _retreat.z = home.z + uz * out;
+    return _retreat;
   }
 
   /** Everything hostile the creature can see, nearest first is not needed. */
@@ -1186,6 +1322,27 @@ export function initCreature(state, opts = {}) {
       }
     }
 
+    // NOTHING WITHIN REACH. Wander, rather than groom on the spot forever -
+    // see CREATURE.ROAM_DIST. Checked after scoring so it cannot pre-empt a
+    // real choice: `candidates` being empty is the whole condition.
+    if (!candidates.length && needs.energy > CREATURE.ROAM_MIN_ENERGY) {
+      const a = rand() * Math.PI * 2;
+      const r = CREATURE.ROAM_DIST * (0.6 + rand() * 0.5);
+      // Homeward-ish if it has a home, so a roaming animal drifts back toward
+      // its own land instead of random-walking off the island.
+      const home = homeTown()?.centre;
+      const bias = home ? 0.45 : 0;
+      const tx = pos.x + Math.cos(a) * r + (home ? (home.x - pos.x) * bias : 0);
+      const tz = pos.z + Math.sin(a) * r + (home ? (home.z - pos.z) * bias : 0);
+      clearClaim();
+      action = {
+        desire: 'play', target: null, targetType: null,
+        kind: 'roam', phase: 'roam', dest: { x: tx, z: tz }
+      };
+      say('nothing here; wandering');
+      return;
+    }
+
     if (!best) return;
 
     // Ignore a re-decision that lands on exactly what it is already doing.
@@ -1507,7 +1664,14 @@ export function initCreature(state, opts = {}) {
       // Hurt: get clear of the fighting instead of resuming ordinary life in
       // the middle of it, which is how it used to wander back into the swords
       // that had just driven it off.
-      if (withdrawn) {
+      //
+      // ...but only if there is a retreat to make. `withdrawn` is sticky
+      // between WAR_WITHDRAW and WAR_REJOIN, so this branch fires every tick
+      // for a long stretch, and for a god with no towns left `retreatSpot` has
+      // nowhere to point. Recreating an action that then cannot move is how a
+      // creature ends up standing in a field until the match ends: the retreat
+      // is remade each tick, so the ordinary mind below never gets a turn.
+      if (withdrawn && retreatSpot()) {
         if (action?.kind !== 'retreat') {
           clearClaim();
           action = {
@@ -1543,7 +1707,11 @@ export function initCreature(state, opts = {}) {
       && !(action.target && (action.target.dead || action.target.harvested
                              || action.target.alive === false));
 
-    if (hauling || committed || action?.kind === 'war') {
+    // `roam` is committed too, for the same reason a haul is: re-deciding every
+    // 1.1s with an empty candidate list picks a NEW random bearing each time,
+    // which is a drunkard's walk that covers no ground at all. It sees the walk
+    // through, and arriving clears the action so the mind gets another look.
+    if (hauling || committed || action?.kind === 'war' || action?.kind === 'roam') {
       decideTimer = CREATURE.DECIDE_INTERVAL;
     }
     else if (decideTimer <= 0 || !action) {
@@ -1615,11 +1783,21 @@ export function initCreature(state, opts = {}) {
       return;
     }
 
+    // --- wandering, because there was nothing to do here ---
+    if (action.phase === 'roam') {
+      if (walkToward(action.dest.x, action.dest.z, CREATURE.ARRIVE_DIST, dt)) action = null;
+      return;
+    }
+
     // --- pulling back to heal ---
     if (action.phase === 'retreat') {
-      const home = homeTown()?.centre;
-      if (home) walkToward(home.x, home.z, CREATURE.ARRIVE_DIST, dt);
-      else speed = 0;
+      const spot = retreatSpot();
+      // Nowhere to go and nothing to run from: stop retreating rather than
+      // stand still. `speed = 0` here was a creature frozen for the rest of the
+      // game; clearing the action lets the ordinary mind take over on the very
+      // next tick.
+      if (!spot) { action = null; return; }
+      walkToward(spot.x, spot.z, CREATURE.ARRIVE_DIST, dt);
       return;
     }
 
@@ -1685,6 +1863,17 @@ export function initCreature(state, opts = {}) {
         // It will wade a little but not swim.
         if (terrain.heightAt(nx, nz) > -0.6) {
           const solid = state.town.pushOutOfCentres(nx, nz, scale * CREATURE.BODY_RADIUS);
+          // BLOCKED AND GETTING NO CLOSER. `walkToward` has had this guard for
+          // phases since a creature was found grinding on a war front; the
+          // approach walk is a second, older copy of the same loop and never
+          // got one. Unlike a war front there is nothing to wait for here, so
+          // it gives the thing up rather than standing at the wall.
+          if (solid.hit
+              && Math.hypot(solid.x - tp.x, solid.z - tp.z)
+                 >= Math.hypot(pos.x - tp.x, pos.z - tp.z) - 1e-3) {
+            abandonAction(`cannot reach the ${action.targetType}`);
+            return;
+          }
           pos.set(solid.x, terrain.heightAt(solid.x, solid.z), solid.z);
         } else {
           abandonAction('will not go into deep water');
@@ -2088,6 +2277,19 @@ export function initCreature(state, opts = {}) {
      * is derived from the war front and would recurse - see nearestBeastIntruder.
      */
     get peaceful() { return !!LEASH_MODES[leash]?.peaceful; },
+    /**
+     * Still in the fight: alive, not routed, not withdrawn, not on a peaceful
+     * leash.
+     *
+     * Deliberately built from THIS creature's own state only - no war front, no
+     * other creature - so anyone may ask it about anyone without the recursion
+     * `atWar` would cause.
+     */
+    get fighting() {
+      if (health <= 0 || state.time < routedUntil) return false;
+      if (LEASH_MODES[leash]?.peaceful) return false;
+      return !withdrawn;
+    },
     get ownerName() { return ownerName(); },
     /** The town it delivers to and retreats to; null for a god with no land. */
     get home() { return homeTown(); },

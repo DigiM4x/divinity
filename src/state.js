@@ -2388,6 +2388,33 @@ export const CREATURE = {
   HEAL_BLOCK_RANGE: 22,
 
   /**
+   * How far clear of its own keep a hurt creature lies up.
+   *
+   * Far enough that it is standing on grass rather than pressed against the
+   * wall - which is where it ended up when the retreat aimed at the centre of a
+   * castle it can never enter, and looked exactly like the animal being stuck.
+   */
+  LAIR_MARGIN: 6,
+
+  /**
+   * ROAMING. How far it wanders when there is nothing at all within reach.
+   *
+   * The mind scores objects it can SEE, and self-directed acts - sleep, groom -
+   * that need no object. So a creature standing where nothing is in
+   * SENSE_RADIUS always picked a self act, and neither of those moves it: it
+   * grooms, then sleeps, then grooms, in the same square metre, and nothing new
+   * can ever come into range because it never goes anywhere. A soak found one
+   * motionless in open country for nearly five minutes, and it would have stood
+   * there until the match ended.
+   *
+   * Deliberately only when the candidate list is EMPTY, so it can never
+   * outcompete a real decision - there is nothing to compete with.
+   */
+  ROAM_DIST: 55,
+  /** ...and how tired it has to be before it would rather sleep than wander. */
+  ROAM_MIN_ENERGY: 0.35,
+
+  /**
    * WHAT A BEAST GOES FOR FIRST, as a multiplier on distance. Lower is more
    * attractive, so a rival's creature twice as far away still beats a farmer.
    *

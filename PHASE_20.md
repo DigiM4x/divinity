@@ -574,3 +574,116 @@ animals on a grid facing the same way is a diagram and a herd is a huddle.
 Verified at scale: 31 paddocks built, the herd mesh grew 24 → 48 alongside the
 pens, three demolished from the middle, and **zero matrix mismatches** between
 pens and cattle afterwards. 127 draw calls, nothing over budget.
+
+
+---
+
+## Addendum — the animals were getting stuck around the castles
+
+Reported after playing: *"the animals are getting stuck around the castles late
+in the game."* Both halves of that were exactly right, and "late" was the clue.
+
+A creature is pushed out of a keep by `TOWN.CENTRE_SOLID` **plus its own bulk**,
+and its bulk grows with it. So the radius it is held at climbs all match:
+
+| scale | held at |
+|---:|---:|
+| 0.85 (hatchling) | 12.0 |
+| 1.69 | 13.5 |
+| 2.30 (full grown) | **14.6** |
+
+Every stuck creature in the soaks sat at exactly that number. Instrumenting for
+"has not moved a metre in sixty seconds" found **five separate causes**, all of
+which get worse as the animals grow, and one of which I introduced the day
+before.
+
+### 1. A razed town still counted as a war
+
+Kelvedon ended a soak with **pop 0 and 0 buildings** — a castle standing alone in
+a field. `warFront` still called it hostile ground, so the player's fox was at
+war *because* it was standing there and standing there *because* it was at war.
+Five minutes at a stretch, seeing zero soldiers, zero villagers, zero buildings.
+
+`worthFighting` now asks whether anything is left. The castle instance
+deliberately does not count: it cannot be attacked or captured once the town is
+empty, and treating it as a prize is the whole bug.
+
+### 2. The healing deadlock I built on Wednesday
+
+`HEAL_BLOCK_RANGE` stops a creature binding its wounds with an enemy standing
+over it. It tested `inField` — alive and not routed — which is **also true of an
+animal that has broken off and is bleeding.** So two beaten creatures near the
+same keep each blocked the other from healing, neither could reach `WAR_REJOIN`,
+and neither had any reason to move. One was found motionless for **eleven
+minutes on 0.2 health**.
+
+The test is `fighting` now: alive, not routed, **not withdrawn**, not peaceful.
+You cannot bind your wounds with a lion standing over you. You can bind them
+next to a lion that is also lying down.
+
+### 3. Retreat walked into a wall
+
+`retreat` aimed at `homeTown().centre` with a stop distance of `ARRIVE_DIST` —
+and the middle of a castle is solid. `walkToward` correctly reported "blocked and
+getting no closer, so this is as near as I will ever be", the animal stopped dead
+against the stone, and every retreating creature converged on the same few metres
+of masonry. It now lies up **beside** its keep, clear by its own bulk plus a
+margin, on the far side from whatever is still standing over it.
+
+### 4. A tug of war between the summons and the war
+
+`simStep` has claimed since Phase 3 that a summons outranks the war, and the
+ordering does hold — the war branch will not clobber a summoned action. What
+nothing stopped was the oscillation: outside its circle the summons pulled it
+back, once inside the war marched it toward a front on the far side of the
+island, a step later it was outside its circle again. A soak caught one
+alternating **89 ticks summoned against 111 at war over ten seconds**, shuffling
+on the spot. A summoned creature now fights what comes to *it*.
+
+### 5. Walking at a boulder inside a castle
+
+`foundTown` flattens ground and drops a castle on it — but unlike `place`, it
+never clears the trees and rocks that were already there. So a prop can end up
+sitting inside a keep, and a creature that decides to eat it walks at the wall
+forever. The `approach` phase is an older, second copy of the movement loop and
+**never got the blocked-and-no-closer guard** `walkToward` has had for phases.
+
+Both ends fixed: things buried in a keep are not candidates, and the approach
+walk gives up rather than standing there.
+
+### ...and two that were not about castles at all
+
+**A god with no land still has a creature.** `homeTown` is null for a faction
+driven off the island, `retreatSpot` had nowhere to point, and the retreat branch
+answers that with `speed = 0` — for the rest of the match. Worse, `withdrawn` is
+sticky between `WAR_WITHDRAW` and `WAR_REJOIN`, so the action was *recreated
+every tick* and the ordinary mind never got a turn.
+
+**There was no wandering.** The mind scores objects it can see, plus self-acts
+that need no object. A creature standing where nothing is in `SENSE_RADIUS`
+always picked a self-act, and neither sleeping nor grooming moves it — so it
+groomed, slept, and groomed again in the same square metre, and nothing new could
+ever come into range because it never went anywhere. Nearly five minutes in open
+country, and it would have stood there until the bell. It roams now, but only
+when the candidate list is genuinely empty, so it can never outcompete a real
+decision.
+
+### Result
+
+Same seed, same island, forty minutes, five gods:
+
+| | before | after |
+|---|---:|---:|
+| Longest a creature stood still | **2,135 s** | 69 s |
+| Stuck events (a minute motionless) | 6 | **1** |
+| ...of those, at a castle | 6 | **0** |
+
+The one survivor is a creature mid-action **89 units from any castle**, which is
+just an animal eating something.
+
+Tested against the worst order a player can actually give: a minimum-radius
+summons dropped dead on a castle centre. `summon` now pushes the spot clear of
+any keep — by the bulk of a **fully grown** creature rather than its bulk today,
+because an order that quietly stops working twenty minutes after you gave it is
+worse than one that was never accepted. It resolved to 14.6 and the creature
+obeyed it without sticking.

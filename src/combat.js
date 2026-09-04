@@ -391,6 +391,30 @@ export function initCombat(state) {
    * declare war by where you put the thing, which is the same rule the platoon
    * already obeys.
    */
+  /**
+   * IS THERE ANYTHING LEFT HERE TO FIGHT?
+   *
+   * A town that has been emptied - no people, no buildings, no garrison - is a
+   * castle standing on its own in a field, and it is not a war. Without this a
+   * creature standing in the ruins is at war BECAUSE it is standing there, and
+   * stands there BECAUSE it is at war: a loop with nothing in it that pins the
+   * animal against the keep for the rest of the match.
+   *
+   * Measured in a 30-minute soak - the player's fox held station 14.6 units
+   * from a razed Kelvedon for five minutes at a stretch, seeing zero soldiers,
+   * zero villagers and zero buildings the whole time.
+   *
+   * The castle instance itself is deliberately NOT counted. It cannot be
+   * attacked or captured once the town is empty, so treating it as something
+   * worth besieging is the whole bug.
+   */
+  function worthFighting(town) {
+    if (!town) return false;
+    if (town.buildings.length > 0) return true;
+    if ((state.town?.populationOf?.(town) ?? 0) > 0) return true;
+    return countFor(town) > 0;
+  }
+
   function warFront() {
     if (!state.towns) return null;
     // Without a planted banner there is no attack order, but home defence below
@@ -404,7 +428,7 @@ export function initCombat(state) {
     // Owner-based now, so a town a RIVAL has captured off another rival is
     // still hostile ground you can plant a flag on.
     for (const t of state.towns) {
-      if (t.owner === 0) continue;
+      if (t.owner === 0 || !worthFighting(t)) continue;
       const d = Math.hypot(rally.x - t.centre.x, rally.z - t.centre.z);
       if (d <= t.influenceRadius + COMBAT.SIEGE_RANGE) return rally;
     }
@@ -428,7 +452,7 @@ export function initCombat(state) {
     if (beast && beast.inField && !LEASH_MODES[beast.leash]?.peaceful) {
       const bp = beast.position;
       for (const t of state.towns) {
-        if (t.owner === 0) continue;
+        if (t.owner === 0 || !worthFighting(t)) continue;
         const d = Math.hypot(bp.x - t.centre.x, bp.z - t.centre.z);
         if (d <= t.influenceRadius) return t.centre;
       }
@@ -470,7 +494,7 @@ export function initCombat(state) {
     }
     for (const t of state.towns) {
       if (t.owner !== faction || !t.warTarget) continue;
-      if (!hostile(t.warTarget, t)) continue;
+      if (!hostile(t.warTarget, t) || !worthFighting(t.warTarget)) continue;
       return t.warTarget.centre;
     }
     return null;
@@ -1294,6 +1318,8 @@ export function initCombat(state) {
      * asks one question whoever is asking it.
      */
      frontFor,
+    /** Anything left in this town worth marching on. See worthFighting. */
+    worthFighting,
     /** Hostiles inside one god's borders, or null. See homeThreatFor. */
     homeThreatFor,
     /** The rally point when the banner is an attack order, else null. */
