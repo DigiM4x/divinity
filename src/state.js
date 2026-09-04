@@ -2322,7 +2322,29 @@ export const CREATURE = {
    * Multiplies the eat and attack scores for a villager candidate.
    */
   ENEMY_APPETITE: 3.5,
+  /**
+   * How much less appealing its OWN god's people are as a meal.
+   *
+   * Only reachable at all once the creature is genuinely starving - see
+   * FRIEND_PREY_HUNGER. Below that it will not consider them, and it will never
+   * attack them or its own god's buildings at any hunger, because there is
+   * nothing to be gained from either.
+   */
   FRIEND_RESTRAINT: 0.35,
+
+  /**
+   * How hungry it has to be before its own people look like food.
+   *
+   * HUNGER_RATE is 0.011/s, so hunger climbs from nothing to full in about
+   * ninety seconds without a meal. 0.85 is a beast that has not eaten in well
+   * over a minute and has ignored everything else it could have eaten first -
+   * which is to say a beast its god has neglected.
+   *
+   * That outcome is deliberate and worth keeping. What was not worth keeping
+   * was a WELL-FED creature doing it because somebody trained its `attack`
+   * weight up for the war.
+   */
+  FRIEND_PREY_HUNGER: 0.85,
   /**
    * DEVOURING. At the front, an enemy civilian is eaten rather than swatted:
    * they take extra damage from a swipe, and each one feeds and heals the

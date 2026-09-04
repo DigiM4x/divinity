@@ -1289,17 +1289,35 @@ export function initCreature(state, opts = {}) {
           score *= c.loose ? CREATURE.LOOSE_FOOD_BONUS : CREATURE.PLANTED_FOOD_PENALTY;
         }
         // People are not all alike to it. An enemy is prey and a rival's town
-        // is a larder; its own people are not. Without this the creature was
-        // exactly as happy to eat the farmer who feeds it as the soldier
-        // marching on the gate, which reads as broken rather than as wild.
-        if (c.kind === 'villager' && (d === 'eat' || d === 'attack')) {
-          score *= c.enemy ? CREATURE.ENEMY_APPETITE : CREATURE.FRIEND_RESTRAINT;
-        }
-        // The same restraint for their houses, now that it can see them. A
-        // creature is not to pull down its own god's granary because it happens
-        // to be the nearest wall.
-        if (c.kind === 'building' && d === 'attack') {
-          score *= c.enemy ? CREATURE.ENEMY_APPETITE : CREATURE.FRIEND_RESTRAINT;
+        // is a larder; its own people are not.
+        //
+        // THAT WAS ALWAYS THE INTENT AND THE NUMBER NEVER DELIVERED IT. A 0.35
+        // multiplier is a 65% discount, and `attack` trains up to 2.0 against a
+        // leash bias of 2.6 - so the moment you raise the war-beast the game
+        // invites you to raise, it comes home and starts on your own village,
+        // which is where it spends most of its time and where the nearest
+        // living thing always is. Measured, well fed, on the Leash of
+        // Aggression: FOUR OF ITS OWN PEOPLE IN FIVE MINUTES.
+        //
+        // So the rule is now a rule rather than a lean:
+        if (!c.enemy) {
+          // Never raise a paw against your own out of temper. There is nothing
+          // to gain from it - a friendly building is demolished outright and a
+          // friendly villager simply dies - so it is pure loss, and no amount
+          // of training should buy it.
+          if (d === 'attack') continue;
+          // Hunger is the one exception, and it is one the player earned. A
+          // beast left to starve turns on the people feeding it, which is a
+          // consequence worth keeping; a fed one does not, which is the whole
+          // complaint. See CREATURE.FRIEND_PREY_HUNGER.
+          if (d === 'eat' && c.kind === 'villager') {
+            if (needs.hunger < CREATURE.FRIEND_PREY_HUNGER) continue;
+            score *= CREATURE.FRIEND_RESTRAINT;
+          }
+        } else if (c.kind === 'villager' && (d === 'eat' || d === 'attack')) {
+          score *= CREATURE.ENEMY_APPETITE;
+        } else if (c.kind === 'building' && d === 'attack') {
+          score *= CREATURE.ENEMY_APPETITE;
         }
         // AND THE SHOW IS FOR STRANGERS. Dancing in your own square is a happy
         // animal; dancing in somebody else's is the whole peaceful route to

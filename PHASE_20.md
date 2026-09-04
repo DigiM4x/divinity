@@ -827,3 +827,72 @@ It is `CFG.WALL_FULL` now. reckoning.js may import no gameplay system - that is
 its whole contract - so the value is mirrored in scoreconfig.js with a note
 saying, in capitals, to move it if `COMBAT.WALL_HP` moves. A duplicated constant
 is a hazard; this is the one that already bit.
+
+
+---
+
+## Addendum — your creature turning on your own
+
+Reported after playing: *"my animal is destroying my properties"* - and then,
+*"and citizens."*
+
+The intent had been written down since the creature could see people at all:
+
+> People are not all alike to it. An enemy is prey and a rival's town is a
+> larder; **its own people are not.**
+
+The comment was right. The number never delivered it. `FRIEND_RESTRAINT` is
+0.35 - a 65% discount - and `attack` trains up to 2.0 against a leash bias of
+2.6. So the moment you raise the war-beast the game invites you to raise, it
+comes home and starts on your own village, which is where it spends most of its
+time and where the nearest living thing always is.
+
+A 65% discount is not a taboo. It is a mild preference.
+
+### Measured, before
+
+Well fed, on the Leash of Aggression, `attack` trained to its 2.0 ceiling,
+standing in its own town:
+
+> **Four of its own people in five minutes.**
+
+Not hunger - hunger was pinned at 0.2 the whole time. And a friendly building
+does not even have hit points: `attack` on one **demolishes it outright**, in a
+single act.
+
+An unattended soak found almost none of this, which is why it had never shown
+up: nothing trains the player's creature when nobody is playing it. This is a
+bug you can only find by doing what a player does.
+
+### The rule now
+
+- **Never attack your own** - people or buildings, at any hunger, however
+  trained. There is nothing to be gained from it: a friendly building is
+  demolished outright and a friendly villager simply dies. Pure loss, and no
+  amount of training should buy it.
+- **Eat your own only when genuinely starving** - `FRIEND_PREY_HUNGER` 0.85,
+  which is a beast that has not eaten in well over a minute and has ignored
+  everything else it could have eaten first.
+
+That second one is deliberate. A creature left to starve turning on the people
+feeding it is a consequence the player earned, and it is worth keeping. A
+well-fed one doing it because somebody trained it for the war is the complaint.
+
+### Measured, after
+
+Two and a half minutes each, on a quiet island inside the raid grace so the
+utility mind is actually the thing being tested (`atWar: false` in both):
+
+| | fed + trained to fight | starving + gentle |
+|---|---:|---:|
+| Own villagers killed | **0** *(was 4)* | 1 |
+| Own buildings razed | **0** | 0 |
+
+What the fed one did instead, over 2,500 sampled ticks: **`play/villager` 2020,
+`play/house` 216, `play/tree` 291, `groom`, `eat/tree`.** Not one `attack` on
+anything of its own. An aggressive beast at home is boisterous, not murderous -
+which is what it should have been all along.
+
+And the starving one worked through **`eat/boulder` 218 and `eat/tree` 330**
+before it touched anybody. It eats the scenery first. It turns on your people
+last, and only if you have let it get that far.
