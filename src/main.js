@@ -547,17 +547,21 @@ function frame(now) {
   if (state.input.keyPressed('KeyF')) state.ui.setDebugVisible(!state.ui.debugVisible);
   if (state.input.keyPressed('KeyG')) state.ui.setMindVisible(!state.ui.mindVisible);
   if (state.input.keyPressed('KeyC')) state.ui.toggleZoo();
-  if (state.input.keyPressed('KeyI')) state.ui.toggleActs();
+  // K for the achievements. They have existed since Phase 13 - fifty of them
+  // across seven groups - on `I`, where nobody found them.
+  if (state.input.keyPressed('KeyK')) state.ui.toggleActs();
   // Escape already closes the other overlays; prayers get the same courtesy.
   if (state.input.keyPressed('KeyR')) state.ui.togglePrayers();
   // Tab was the only unbound key left, and it is the one this genre uses for a
   // scoreboard anyway.
   if (state.input.keyPressed('Tab')) state.reckoningUi.toggle();
   // M mutes. The one key a player reaches for without reading a legend.
-  if (state.input.keyPressed('KeyM')) {
-    state.ui.toast(state.sound.toggleMute() ? 'Muted' : 'Sound on');
-  }
-  // M mutes. The one key a player reaches for without reading a legend.
+  //
+  // BOUND TWICE, identically, comment and all - so one press called
+  // `toggleMute()` twice and the sound came straight back on. The key appeared
+  // to do nothing. Exactly the fault the KeyR note below this describes, in the
+  // same function, forty lines apart; a duplicated handler is the shape of bug
+  // this file keeps growing.
   if (state.input.keyPressed('KeyM')) {
     state.ui.toast(state.sound.toggleMute() ? 'Muted' : 'Sound on');
   }

@@ -348,6 +348,55 @@ const CSS = `
 #hud .acts .row.got .pct { opacity: 0.8; color: #ffe9b8; }
 
 /* --- achievement announcement --- */
+/* A bloom of light across the whole frame as the card lands. The card by
+   itself was a tasteful notice in the corner of a busy screen; this is the part
+   that makes you look up. One persistent element, animation retriggered per
+   award - see showNextAward. */
+#hud .awardflash {
+  position: absolute; inset: 0; pointer-events: none; opacity: 0;
+  background:
+    radial-gradient(120% 60% at 50% 20%, rgba(255,214,130,0.34) 0%,
+                    rgba(255,190,90,0.12) 38%, transparent 70%);
+}
+#hud .awardflash.go { animation: awardbloom 0.85s cubic-bezier(0.1,0.8,0.2,1) 1; }
+@keyframes awardbloom {
+  0%   { opacity: 0; }
+  12%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* Rays behind the star, turning slowly. */
+#hud .award .rays {
+  position: absolute; left: 6px; top: 50%; width: 86px; height: 86px;
+  margin-top: -43px; pointer-events: none; opacity: 0.5;
+  background: conic-gradient(from 0deg,
+    rgba(255,214,130,0.5) 0deg 7deg, transparent 7deg 45deg,
+    rgba(255,214,130,0.5) 45deg 52deg, transparent 52deg 90deg,
+    rgba(255,214,130,0.5) 90deg 97deg, transparent 97deg 135deg,
+    rgba(255,214,130,0.5) 135deg 142deg, transparent 142deg 180deg,
+    rgba(255,214,130,0.5) 180deg 187deg, transparent 187deg 225deg,
+    rgba(255,214,130,0.5) 225deg 232deg, transparent 232deg 270deg,
+    rgba(255,214,130,0.5) 270deg 277deg, transparent 277deg 315deg,
+    rgba(255,214,130,0.5) 315deg 322deg, transparent 322deg 360deg);
+  -webkit-mask-image: radial-gradient(closest-side, transparent 22%, #000 45%, transparent 78%);
+  mask-image: radial-gradient(closest-side, transparent 22%, #000 45%, transparent 78%);
+  animation: awardspin 9s linear infinite;
+}
+@keyframes awardspin { to { transform: rotate(360deg); } }
+
+/* Sparks thrown off as it arrives. Eight spans, each given its own bearing by
+   an inline custom property, so the whole burst is one CSS animation. */
+#hud .award .spark {
+  position: absolute; left: 34px; top: 50%; width: 4px; height: 4px;
+  border-radius: 50%; background: #ffe6ae; pointer-events: none;
+  box-shadow: 0 0 8px #ffd884;
+  animation: awardspark 0.75s cubic-bezier(0.15,0.7,0.3,1) 1 forwards;
+}
+@keyframes awardspark {
+  0%   { transform: translate(0, 0) scale(1); opacity: 1; }
+  100% { transform: translate(var(--dx), var(--dy)) scale(0.2); opacity: 0; }
+}
+
 #hud .award {
   position: absolute; top: 132px; left: 50%;
   transform: translateX(-50%) translateY(-14px) scale(0.94);
@@ -360,10 +409,18 @@ const CSS = `
     linear-gradient(180deg, rgba(58,46,24,0.94) 0%, rgba(24,20,14,0.94) 100%);
   box-shadow: 0 14px 44px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,233,184,0.12) inset,
               0 0 26px rgba(255,205,110,0.16);
-  transition: opacity 0.32s ease, transform 0.32s cubic-bezier(0.2, 1.5, 0.4, 1);
+  transition: opacity 0.28s ease, transform 0.46s cubic-bezier(0.16, 1.7, 0.3, 1);
   min-width: 300px; max-width: 520px;
 }
 #hud .award.on { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+/* Overshoot harder than a notification usually would. It is a trophy. */
+#hud .award.on .star { animation: awardstar 0.7s cubic-bezier(0.15,1.9,0.3,1) 1,
+                                  awardpulse 1.9s ease-in-out 0.7s infinite; }
+@keyframes awardstar {
+  0%   { transform: scale(0.2) rotate(-140deg); opacity: 0; }
+  60%  { transform: scale(1.35) rotate(8deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
 #hud .award .star {
   font-size: 26px; line-height: 1; color: #ffd884;
   text-shadow: 0 0 16px rgba(255,205,110,0.75);
@@ -591,7 +648,7 @@ export function initUi(state) {
       <div><b>1-4</b> leash: learn / compassion / aggression / free</div>
       <div><b>2</b> + send it into a rival town &mdash; it performs, they come over</div>
       <div><b>Drag the banner</b> &mdash; send your platoon</div>
-      <div><b>I</b> achievements &nbsp; <b>R</b> prayers &nbsp; <b>Tab</b> reckoning &nbsp; <b>M</b> mute &nbsp; <b>N</b> new island</div>
+      <div><b>K</b> achievements &nbsp; <b>R</b> prayers &nbsp; <b>Tab</b> reckoning &nbsp; <b>M</b> mute &nbsp; <b>N</b> new island</div>
       <div><b>B</b> build &nbsp; <b>C</b> creature &nbsp; <b>G</b> mind &nbsp; <b>F</b> debug &nbsp; <b>P</b> pause</div>
     </div>
     <div class="panel buildbar" id="hud-buildbar">
@@ -607,6 +664,7 @@ export function initUi(state) {
     <div class="radial" id="hud-radial"></div>
     <div class="zoo" id="hud-zoo"></div>
     <div class="acts" id="hud-acts"></div>
+    <div class="awardflash" id="hud-awardflash"></div>
     <div class="award" id="hud-award"></div>
     <div class="toast" id="hud-toast"></div>
   `;
@@ -616,6 +674,7 @@ export function initUi(state) {
   const elToast = document.getElementById('hud-toast');
   const elActs = document.getElementById('hud-acts');
   const elAward = document.getElementById('hud-award');
+  const elAwardFlash = document.getElementById('hud-awardflash');
   const elSculpt = document.getElementById('hud-sculpt');
   const elPrayers = document.getElementById('hud-prayers');
   const elPrayerDetail = document.getElementById('hud-prayerdetail');
@@ -871,16 +930,40 @@ export function initUi(state) {
     if (!a) return;
     const got = state.achievements?.earnedCount ?? 0;
     const total = state.achievements?.total ?? 0;
+
+    // Eight sparks on their own bearings, thrown from behind the star. Built
+    // into the card's markup rather than animated in JS: the whole burst is one
+    // CSS animation per span and it cleans itself up when the card is rebuilt.
+    let sparks = '';
+    for (let i = 0; i < 8; i++) {
+      const ang = (i / 8) * Math.PI * 2 + 0.4;
+      const dist = 34 + (i % 3) * 13;
+      sparks += `<span class="spark" style="--dx:${(Math.cos(ang) * dist).toFixed(0)}px;` +
+                `--dy:${(Math.sin(ang) * dist).toFixed(0)}px;` +
+                `animation-delay:${(i * 0.018).toFixed(3)}s"></span>`;
+    }
+
     elAward.innerHTML =
       `<div class="shine"></div>` +
+      `<div class="rays"></div>` +
+      sparks +
       `<div class="star">&#9733;</div>` +
       `<div class="txt">` +
         `<div class="kicker">Achievement unlocked</div>` +
         `<div class="nm2">${a.name}</div>` +
         `<div class="bl2">${a.blurb}</div>` +
       `</div>` +
-      `<div class="tally2">${got} / ${total}<br><span style="opacity:0.6">press I</span></div>`;
+      `<div class="tally2">${got} / ${total}<br><span style="opacity:0.6">press K</span></div>`;
     elAward.classList.add('on');
+
+    // Retrigger the full-frame bloom. It is one persistent element, so the
+    // animation has to be taken off and put back with a reflow in between -
+    // without the forced reflow the browser coalesces both changes and nothing
+    // replays.
+    elAwardFlash.classList.remove('go');
+    void elAwardFlash.offsetWidth;
+    elAwardFlash.classList.add('go');
+
     awardShowing = true;
     awardTimer = AWARD_HOLD;
   }
