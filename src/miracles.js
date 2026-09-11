@@ -252,6 +252,41 @@ export function initMiracles(state) {
   }
 
   // --- the miracles ---------------------------------------------------------
+  /**
+   * BRING A STRIKE DOWN ON A CASTLE.
+   *
+   * The castle is the town, not a building - see MIRACLE.WALL_HIT_RANGE - so
+   * neither blast loop could ever see it and the biggest thing on the island
+   * was the one thing a god could not touch. This is the path that fixes that,
+   * shared by both miracles so they can never drift apart.
+   *
+   * It mirrors combat.js's siege ending exactly: wallHp floors at zero, the
+   * breach is announced once and is permanent. Deliberately NOT limited to
+   * rival walls - a fireball dropped on your own keep breaches your own keep,
+   * which is the sort of thing a god should be allowed to do to themselves.
+   */
+  function strikeWalls(at, damage) {
+    if (!damage) return null;
+    let hit = null;
+    for (const town of state.town.towns) {
+      if (town.wallHp <= 0) continue;
+      if (Math.hypot(town.centre.x - at.x, town.centre.z - at.z) > MIRACLE.WALL_HIT_RANGE) continue;
+      town.wallHp = Math.max(0, town.wallHp - damage);
+      hit = town;
+      if (town.wallHp === 0 && !town.breached) {
+        town.breached = true;            // for good. See COMBAT.WALL_REGEN.
+        state.fx?.burst(town.centre, 30, 0xb08d63);
+        state.ui?.toast(town.name + "'s wall is breached");
+      } else {
+        // SAY THE NUMBER. A wall that is visibly still standing after a direct
+        // hit reads as a miracle that did nothing; the count is the only thing
+        // that tells the player they are three casts from being through it.
+        state.ui?.toast(`${town.name}'s wall — ${Math.round(town.wallHp)} / ${COMBAT.WALL_HP}`);
+      }
+    }
+    return hit;
+  }
+
   function cast(key, at) {
     const def = MIRACLES[key];
     if (!def || !at) return { ok: false, reason: 'nowhere to cast' };
@@ -317,7 +352,16 @@ export function initMiracles(state) {
             if (Math.hypot(v.pos.x - at.x, v.pos.z - at.z) < r) { v.alive = false; killed++; }
           }
         }
-        for (const b of [...state.town.buildings]) {
+        // EVERY TOWN'S BUILDINGS, not just your own.
+        //
+        // This read `state.town.buildings`, which is a getter for the player's
+        // FOUNDING town alone - so a fireball dropped in the middle of a rival
+        // village killed its people, dug a crater and left every house
+        // standing, while the same fireball at home levelled four of your own.
+        // Both miracles had it. It is the same fault the water miracle had a
+        // few lines above, which is why that comment is there: `buildings` and
+        // `allBuildings` differ by one word and by the entire rest of the map.
+        for (const b of [...state.town.allBuildings]) {
           if (Math.hypot(b.pos.x - at.x, b.pos.z - at.z) < r) {
             state.town.demolish(b);
             state.events?.emit('building-destroyed',
@@ -335,6 +379,12 @@ export function initMiracles(state) {
           p.vel.y += f * 0.7;
           state.props.wake(p);
         }
+        // The castle, which no blast loop above can see.
+        strikeWalls(at, def.wallDamage);
+        // AND THE TREES BURN. A fireball in a wood used to shove the loose
+        // branches about and leave every trunk standing, so the one place the
+        // effect should have been unmissable was the place it showed least.
+        if (def.burnsFlora) state.flora?.clearAround(at.x, at.z, r);
         if (killed) state.events?.emit('villagers-killed',
           { count: killed, pos: at, cause: 'fireball', byPlayer: true, by: 0 });
         state.fx?.burst(at, 40, def.color);
@@ -351,13 +401,17 @@ export function initMiracles(state) {
             if (Math.hypot(v.pos.x - at.x, v.pos.z - at.z) < r) { v.alive = false; killed++; }
           }
         }
-        for (const b of [...state.town.buildings]) {
-          if (Math.hypot(b.pos.x - at.x, b.pos.z - at.z) < r * 0.8) {
+        // THE FULL RADIUS, not four fifths of it. See MIRACLE.LIGHTNING_RADIUS
+        // for the measurements: at 0.8 the reach was under the minimum spacing
+        // between two buildings, so a bolt could miss what it was aimed at.
+        for (const b of [...state.town.allBuildings]) {
+          if (Math.hypot(b.pos.x - at.x, b.pos.z - at.z) < r) {
             state.town.demolish(b);
             state.events?.emit('building-destroyed',
               { building: b, pos: at, cause: 'lightning', byPlayer: true, by: 0 });
           }
         }
+        strikeWalls(at, def.wallDamage);
         if (killed) state.events?.emit('villagers-killed',
           { count: killed, pos: at, cause: 'lightning', byPlayer: true, by: 0 });
         state.fx?.burst(at, 30, def.color);

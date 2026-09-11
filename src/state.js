@@ -3139,7 +3139,38 @@ export const MIRACLE = {
   WATER_RADIUS: 22,
   FOOD_RADIUS: 18,
   FIRE_RADIUS: 14,
-  LIGHTNING_RADIUS: 9
+
+  /**
+   * LIGHTNING WAS TOO SMALL TO HIT ANYTHING.
+   *
+   * It was 9, and the building sweep ran at radius * 0.8 - a reach of 7.2. The
+   * measured nearest-neighbour spacing between buildings in a grown town is
+   * 11.5 at the MINIMUM and 14.1 at the median, and a house is several units
+   * across, so a strike aimed at the visible edge of a hut was routinely more
+   * than 7.2 from its centre and destroyed nothing at all. The bolt, the
+   * crater and the sparks all played. Nothing fell down.
+   *
+   * 10, and the building sweep now uses the full radius rather than four
+   * fifths of it. That reliably takes the one thing you aimed at and, being
+   * under the 11.5 minimum spacing, essentially never takes two - which is the
+   * division of labour: lightning is the precise one, fireball is the wide one.
+   */
+  LIGHTNING_RADIUS: 10,
+
+  /**
+   * HOW CLOSE A STRIKE HAS TO LAND TO COUNT AS HITTING THE CASTLE.
+   *
+   * The castle is not in `state.town.buildings` - it belongs to the town, as
+   * `town.wallHp` - so for twenty phases every blast loop walked straight past
+   * the largest structure on the island and a fireball dropped squarely on a
+   * keep did nothing but dig a hole beside it. That is most of what "the
+   * miracles do not destroy things" meant.
+   *
+   * The castle is 23 across, so the wall itself is about 11.5 from the centre.
+   * 16 gives a little forgiveness for aiming at the foot of a wall rather than
+   * the middle of the courtyard.
+   */
+  WALL_HIT_RANGE: 16
 };
 
 /** Per-miracle cost, effect strength and alignment consequence. */
@@ -3155,11 +3186,25 @@ export const MIRACLES = {
   },
   fireball: {
     label: 'Fireball', key: 'fireball', color: 0xe8622f, cost: 55,
-    craterDepth: 1.6, align: -0.06
+    craterDepth: 1.6, align: -0.06,
+    /**
+     * Damage to a curtain wall it lands on, against COMBAT.WALL_HP 120.
+     *
+     * Three casts breach a castle, for 165 belief and a fifth of your
+     * alignment - a real siege route for a god with no army, and priced so it
+     * is a decision rather than a habit. It has to be three in quick
+     * succession: COMBAT.WALL_REGEN puts 1.5 a second back, so a wall left
+     * alone is whole again in eighty seconds. You cannot chip a castle down.
+     */
+    wallDamage: 40,
+    /** It burns the trees it lands in. See MIRACLE.FIRE_RADIUS. */
+    burnsFlora: true
   },
   lightning: {
     label: 'Lightning', key: 'lightning', color: 0xc9a6ff, cost: 45,
-    craterDepth: 0.9, align: -0.05
+    craterDepth: 0.9, align: -0.05,
+    /** Scorches a wall rather than breaking it: seven casts, against fire's three. */
+    wallDamage: 18
   }
 };
 
