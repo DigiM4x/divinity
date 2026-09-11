@@ -213,6 +213,14 @@ const CSS = `
 #hud .rivals .pp { opacity: 0.55; font-variant-numeric: tabular-nums; }
 #hud .rivals .track { height: 5px; border-radius: 3px; background: rgba(255,255,255,0.10); margin-top: 3px; overflow: hidden; }
 #hud .rivals .fill { height: 100%; border-radius: 3px; transition: width 0.3s ease; }
+/* While your creature is actually performing where they can see it, the bar it
+   is filling says so. The one moment the player can connect the act to the
+   meter, so it is worth a cue. */
+#hud .rivals .fill.glow {
+  box-shadow: 0 0 8px #ffe9b8, 0 0 14px rgba(255,233,184,0.6);
+  animation: awepulse 1.2s ease-in-out infinite;
+}
+@keyframes awepulse { 0%,100% { opacity: 1; } 50% { opacity: 0.55; } }
 #hud .rivals .lbl2 { font-size: 9px; opacity: 0.45; letter-spacing: 0.1em; text-transform: uppercase; margin-top: 2px; }
 #hud .rivals .won { color: #9be08a; }
 
@@ -581,6 +589,7 @@ export function initUi(state) {
       <div><b>Both buttons</b> (or middle / Alt+drag / <b>Q,E</b>) &mdash; orbit</div>
       <div><b>Drag on creature</b> &mdash; slow = stroke, fast = slap</div>
       <div><b>1-4</b> leash: learn / compassion / aggression / free</div>
+      <div><b>2</b> + send it into a rival town &mdash; it performs, they come over</div>
       <div><b>Drag the banner</b> &mdash; send your platoon</div>
       <div><b>I</b> achievements &nbsp; <b>R</b> prayers &nbsp; <b>Tab</b> reckoning &nbsp; <b>M</b> mute &nbsp; <b>N</b> new island</div>
       <div><b>B</b> build &nbsp; <b>C</b> creature &nbsp; <b>G</b> mind &nbsp; <b>F</b> debug &nbsp; <b>P</b> pause</div>
@@ -913,6 +922,44 @@ export function initUi(state) {
     prayerSig = '';
   });
   state.events?.on('prayer-raised', () => { prayerSig = ''; });
+
+  // --- awe, said out loud ---------------------------------------------------
+  //
+  // The peaceful route to a town has worked since Phase 9 and has never once
+  // announced itself. A player could fill a rival's meter to ninety percent by
+  // casting where they could see, and the only sign of it was a bar labelled
+  // with a bare number in a corner panel.
+  //
+  // So it speaks at the quarters, and it speaks in BOTH DIRECTIONS - a rival
+  // god courting one of your towns is a way to lose one, and it was completely
+  // silent. Once per town per faction per mark: `crossed` is keyed on all
+  // three, and its size is bounded by towns x factions x marks.
+  const AWE_MARKS = [0.25, 0.5, 0.75, 0.9];
+  const aweSaid = new Set();
+  state.events?.on('awe-changed', (e) => {
+    if (!e?.town) return;
+    const mine = e.by === 0;
+    // Only what concerns the player: your progress on somebody, or somebody's
+    // progress on you. Two rivals courting each other is not your business.
+    if (!mine && e.town.owner !== 0) return;
+    for (const m of AWE_MARKS) {
+      if (e.from >= m || e.to < m) continue;
+      const key = `${e.town.index}:${e.by}:${m}`;
+      if (aweSaid.has(key)) continue;
+      aweSaid.add(key);
+      const pct = Math.round(m * 100);
+      if (mine) {
+        toast(m >= 0.9
+          ? `${e.town.name} is nearly yours — ${pct}% in awe of you`
+          : `${e.town.name} is ${pct}% won over`, 2.2);
+      } else {
+        const who = state.factions?.[e.by]?.name ?? 'A rival';
+        toast(m >= 0.9
+          ? `${e.town.name} is about to leave you for ${who}`
+          : `${who} is winning ${e.town.name} over — ${pct}%`, 2.4);
+      }
+    }
+  });
 
   function togglePrayers() {
     prayersOpen = !prayersOpen;
@@ -1506,6 +1553,15 @@ export function initUi(state) {
       // sieges rather than nowhere at all.
       const rivals = state.towns ?? [];
       if (rivals.length) {
+        // Which towns can see your creature right now. `townsWatching` is the
+        // same call the awe system itself uses, so what the panel says is
+        // watching you is exactly what would be impressed by a performance.
+        const beast = state.creature;
+        const seenBy = beast && beast.animal
+          ? new Set(state.town.townsWatching(beast.position.x, beast.position.z, 0)
+            .map((w) => w.index))
+          : new Set();
+
         let h = '<h4>The island</h4>';
         for (const t of rivals) {
           const col = '#' + t.colour.toString(16).padStart(6, '0');
@@ -1517,6 +1573,20 @@ export function initUi(state) {
             `<span class="pp">${state.town.populationOf(t)}</span></div>`;
           if (t.owner === 0) {
             h += `<div class="lbl2 won">${t.index === 0 ? 'your seat' : 'joined you'}</div>`;
+            // YOU CAN BE COURTED TOO. Rival missionary gods work the same meter
+            // on your towns, and until now that was completely invisible - a
+            // way to lose a town with no warning of any kind.
+            let rival = 0;
+            let rivalBy = -1;
+            for (let f = 1; f < (t.impressedBy?.length ?? 0); f++) {
+              if (t.impressedBy[f] > rival) { rival = t.impressedBy[f]; rivalBy = f; }
+            }
+            if (rival > 0.08) {
+              const who = state.factions?.[rivalBy]?.name ?? 'a rival';
+              const rp = Math.round(rival * 100);
+              h += `<div class="track"><span class="fill" style="width:${rp}%;background:#c9a6ff"></span></div>` +
+                   `<div class="lbl2" style="color:#c9a6ff">${who} is winning them over &middot; ${rp}%</div>`;
+            }
             if (t.breached) {
               h += `<div class="lbl2" style="color:#ff9d8a">wall breached &mdash; it will not be rebuilt</div>`;
             }
@@ -1529,8 +1599,27 @@ export function initUi(state) {
             }
             const wall = Math.round((t.wallHp / 120) * 100);
             const def = state.combat?.countFor(t) ?? 0;
-            h += `<div class="track"><span class="fill" style="width:${pct}%;background:#ffe9b8"></span></div>` +
-                 `<div class="lbl2">awe ${pct}%</div>` +
+            // THE AWE BAR NOW SAYS WHAT IT IS FOR. It read "awe 0%" for
+            // twelve phases, which is a number with no verb attached: nothing
+            // anywhere told the player that filling it takes the town without a
+            // fight, or what fills it.
+            const watching = seenBy.has(t.index);
+            const performing = watching && beast?.action?.desire === 'impress';
+            let aweNote;
+            if (performing) {
+              aweNote = `<span style="color:#ffe9b8">your beast is winning them over</span>`;
+            } else if (watching) {
+              aweNote = `<span style="color:#ffe9b8">they can see your beast</span>`;
+            } else if (pct >= 80) {
+              aweNote = `awe ${pct}% &middot; almost yours`;
+            } else if (pct > 0) {
+              aweNote = `awe ${pct}% &middot; 100% and they join you`;
+            } else {
+              aweNote = `awe 0% &middot; wonders in their sight win them over`;
+            }
+            h += `<div class="track"><span class="fill${performing ? ' glow' : ''}" ` +
+                 `style="width:${pct}%;background:#ffe9b8"></span></div>` +
+                 `<div class="lbl2">${aweNote}</div>` +
                  `<div class="track"><span class="fill" style="width:${wall}%;background:#ff9d8a"></span></div>` +
                  // A breach is permanent, so it is worth a word rather than a
                  // "0%" the player has to know the rules to read. See

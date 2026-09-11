@@ -1598,6 +1598,32 @@ export const TOWN = {
   /** Awe fades if you stop impressing them, per second. */
   IMPRESS_DECAY: 0.004,
 
+  /**
+   * Seconds of being ignored before a town starts forgetting you.
+   *
+   * IMPRESS_DECAY is 0.004/s, which is 24 POINTS A MINUTE off a meter that runs
+   * to 100 - and against IMPRESS_PER_DANCE (3 points) that is eight dances a
+   * minute just to stand still. A ten-minute soak with the creature parked in
+   * Ashfell's streets on the Leash of Compassion watched the meter climb to 21%
+   * and then slide back to 0, because the animal spent 37% of its time asleep
+   * and only 32% performing. The peaceful route did not merely feel slow; it
+   * could not be finished at all.
+   *
+   * The decay is right in principle - awe you stop earning should fade - but it
+   * was running WHILE you were earning it, which turned courting into a race
+   * against a clock nobody could win. So it holds off while a god is actively
+   * working on them, and starts the moment that god walks away.
+   *
+   * FORTY-FIVE, NOT TWENTY, AND A NAP IS WHY. Performing costs energy, so a
+   * creature that dances keeps dancing until it is tired and then sleeps - the
+   * route limits itself, which is a good tension to have. At twenty seconds the
+   * nap outlasted the grace and the decay ate the courtship: a soak climbed to
+   * 82% and slid back rather than finishing. This is long enough to cover the
+   * animal resting between performances and still short enough that walking it
+   * home ends the courtship.
+   */
+  IMPRESS_GRACE: 45,
+
   /** Footprint of the castle at the town centre, corner to corner. */
   /**
    * Everything on this island got about a third larger this phase, the keep
@@ -3412,6 +3438,16 @@ const EVENT_FIELDS = {
   // answered must not pay you belief for it - the same rule Phase 19 wrote down
   // when the rain stopped counting as the player's doing.
   'building-placed': ['building', 'def', 'pos', 'byPlayer', 'by'],
+  /**
+   * A town thought better - or worse - of somebody.
+   *
+   * Awe has moved since Phase 9 and has never once been announced: the only
+   * trace it left was a line in the debug panel, and only for the player. So the
+   * peaceful route to a town existed, worked, and told nobody it was happening.
+   * `from` and `to` are carried so a listener can spot a crossing without
+   * keeping its own copy of the meter.
+   */
+  'awe-changed': ['town', 'by', 'from', 'to', 'why'],
 
   // --- Phase 16 ------------------------------------------------------------
   // Facts the prayer system needs that no existing emitter was reporting.

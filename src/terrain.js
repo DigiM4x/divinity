@@ -13,7 +13,7 @@
 import * as THREE from 'three';
 import { createNoise2D, fbm, ridged, clamp, smoothstep, lerp, mulberry32} from './lib/noise.js';
 import { makeGrainTexture } from './lib/textures.js';
-import { WORLD, TERRACE, WATER, ISLANDS} from './state.js';
+import { WORLD, TERRACE, WATER, ISLANDS, CIVS} from './state.js';
 
 const SIZE = WORLD.SIZE;
 const HALF = WORLD.HALF;
@@ -392,10 +392,19 @@ export function initTerrain(state) {
   // Drawn by patching the standard material rather than by laying a decal mesh
   // over the ground: the ring then follows every fold of the terrain exactly,
   // with no z-fighting and no extra draw call.
-  // Up to four territories at once: the player's plus the rivals'. Each is a
-  // soft ring in that town's own colour, so who owns what is legible at a
-  // glance without a minimap.
-  const MAX_RINGS = 4;
+  // One ring per territory, in that town's own colour, so who owns what is
+  // legible at a glance without a minimap.
+  //
+  // TAKEN FROM CIVS.MAX RATHER THAN WRITTEN DOWN. It was a hard 4 - correct when
+  // the island held the player and three rivals - and the Phase 20 picker lets
+  // you start five. `setInfluenceRings` clamps with `Math.min`, so the fifth
+  // civilisation's ring was not dropped loudly: it simply never appeared, and
+  // you only saw it by zooming out and counting.
+  //
+  // Worse, the number was written TWICE: once here and once as a literal `[4]`
+  // inside the shader source below, which is why it is interpolated now. Two
+  // copies of one number is exactly how this got out of step in the first place.
+  const MAX_RINGS = CIVS.MAX;
   const influence = {
     uInfCenter: { value: Array.from({ length: MAX_RINGS }, () => new THREE.Vector3(0, -9999, 0)) },
     uInfRadius: { value: new Array(MAX_RINGS).fill(0) },
@@ -419,9 +428,9 @@ export function initTerrain(state) {
         '#include <common>',
         `#include <common>
          varying vec3 vInfWPos;
-         uniform vec3 uInfCenter[4];
-         uniform float uInfRadius[4];
-         uniform vec3 uInfColor[4];
+         uniform vec3 uInfCenter[${MAX_RINGS}];
+         uniform float uInfRadius[${MAX_RINGS}];
+         uniform vec3 uInfColor[${MAX_RINGS}];
          uniform int uInfCount;
          uniform float uInfStrength;
          uniform float uAlign;`
@@ -443,7 +452,7 @@ export function initTerrain(state) {
            // A faint wash over each territory, plus a broad rim at its edge.
            // The rim needs real width: this is added after tone mapping, and a
            // band only a couple of units across vanishes at gameplay zoom.
-           for (int i = 0; i < 4; i++) {
+           for (int i = 0; i < ${MAX_RINGS}; i++) {
              if (i >= uInfCount) break;
              float r = uInfRadius[i];
              if (r <= 0.0) continue;

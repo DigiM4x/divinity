@@ -767,6 +767,8 @@ export function initTown(state) {
        * Bounded by the civilisation count, which is fixed at boot.
        */
       impressedBy: factions.map(() => 0),
+      /** When each faction last impressed them. Drives TOWN.IMPRESS_GRACE. */
+      impressedAt: factions.map(() => -Infinity),
       /** The player's share of the above, for the HUD that has always read it. */
       get impressiveness() { return this.impressedBy[0]; },
       /** Population, refreshed each sim tick. See simStep. */
@@ -1478,7 +1480,23 @@ export function initTown(state) {
     if (town.owner === by) return;
     const before = town.impressedBy[by] ?? 0;
     const now = THREE.MathUtils.clamp(before + amount, 0, 1);
+    if (now === before) return;
     town.impressedBy[by] = now;
+    // When this god last did anything about this town, which is what the decay
+    // above waits on. Only a POSITIVE act counts as courting - being appalled by
+    // your cruelty is not attention you get credit for.
+    if (amount > 0) town.impressedAt[by] = state.time;
+
+    // ANNOUNCED, at last. Awe has moved since Phase 9 and the only trace it ever
+    // left was `debug.lastLog`, for the player alone - so the game's peaceful
+    // route to a town worked perfectly and told nobody it was happening.
+    // Emitted as a plain fact, like everything else here; the HUD decides what
+    // is worth saying out loud.
+    //
+    // Deliberately BEFORE the capture below, so a listener sees the meter reach
+    // 1 and then hears the capture, in that order.
+    state.events?.emit('awe-changed', { town, by, from: before, to: now, why });
+
     if (amount > 0 && now >= 1 && before < 1) {
       capture(town, 'awe', by);
     } else if (why && Math.abs(amount) > 0.02 && by === 0) {
@@ -1528,7 +1546,10 @@ export function initTown(state) {
     // Whoever takes it stops being impressed by it and starts from scratch with
     // everyone else - otherwise a town that had already been talked half-round
     // by a third god falls to them for free the moment it changes hands.
-    for (let i = 0; i < town.impressedBy.length; i++) town.impressedBy[i] = 0;
+    for (let i = 0; i < town.impressedBy.length; i++) {
+      town.impressedBy[i] = 0;
+      town.impressedAt[i] = -Infinity;   // or the grace outlives the meter
+    }
 
     // Re-tint everything it owns to the new banner.
     for (const b of town.buildings) {
@@ -1855,8 +1876,15 @@ export function initTown(state) {
       // courted by a rival god. Gated on `!isPlayer` before Phase 20, which was
       // right when the player was the only one who could impress anybody and
       // would now quietly make the player's own towns immune to being wooed.
+      //
+      // ...but NOT while that god is still working on them. See
+      // TOWN.IMPRESS_GRACE: the decay is 24 points a minute against 3 points a
+      // dance, so running it during a performance meant the meter fought the
+      // hand that was filling it and the peaceful route could not be finished.
       for (let i = 0; i < town.impressedBy.length; i++) {
         if (i === town.owner || town.impressedBy[i] <= 0) continue;
+        const last = town.impressedAt?.[i] ?? -Infinity;
+        if (state.time - last < TOWN.IMPRESS_GRACE) continue;
         town.impressedBy[i] = Math.max(0, town.impressedBy[i] - TOWN.IMPRESS_DECAY * dt);
       }
     }

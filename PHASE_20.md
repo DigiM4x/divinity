@@ -1031,3 +1031,113 @@ motion in between.
 
 The bars are also notched, with a repeating gradient, so they read as gauges
 rather than smears of colour.
+
+
+---
+
+## Addendum — surfacing the peaceful victory
+
+Asked for: make the awe route discoverable. It works, rival missionary gods use
+it, and the game said nothing about it whatsoever - `awe 0%` in a corner panel,
+with no verb attached.
+
+### It was never announced
+
+`addImpressiveness` has moved the meter since Phase 9 and the only trace it ever
+left was a line in `debug.lastLog`, **for the player alone**. So it is a fact on
+the bus now - `awe-changed`, carrying `from` and `to` so a listener can spot a
+crossing without keeping its own copy - and three things listen:
+
+- **The HUD speaks at the quarters**, in both directions. A rival god courting
+  one of your towns is a way to lose one and it was completely silent.
+- **The bar explains itself.** `awe 0%` became *"wonders in their sight win them
+  over"*, then *"100% and they join you"*, then *"almost yours"* - and while your
+  creature is standing in their streets it reads **"they can see your beast"**,
+  or **"your beast is winning them over"** while it performs, with the bar
+  glowing. That is the moment the act and the meter connect.
+- **Your own towns show it too**, in the courting god's colour.
+
+Plus one line in the controls: *"**2** + send it into a rival town — it performs,
+they come over."*
+
+### ...and then it turned out not to work
+
+Surfacing a route that cannot be finished is worse than leaving it hidden: the
+player gets to watch it fail. The first ten-minute soak climbed to 21% and slid
+back to zero.
+
+The arithmetic says why, and it is not subtle:
+
+| | |
+|---|---:|
+| `IMPRESS_DECAY` 0.004/s | **24 points a minute** off a meter that runs to 100 |
+| `IMPRESS_PER_DANCE` | **3 points** |
+| Dances needed just to stand still | **8 a minute** |
+| A miracle's 0.16 evaporates in | **40 seconds** |
+
+The decay is right in principle - awe you stop earning should fade - but it was
+running **while you were earning it**, which turned courting into a race against
+a clock nobody could win. `IMPRESS_GRACE` holds it off for 45 seconds after a
+god last impressed that town, and starts it the moment they walk away.
+
+Forty-five rather than twenty because **performing costs energy**: a creature
+that dances keeps dancing until it is tired and then sleeps. That self-limiting
+tension is worth keeping; a nap that undoes the whole courtship is not.
+
+### The clean result
+
+Fresh island, creature parked in Ashfell's streets on the Leash of Compassion,
+nothing else touched:
+
+```
+  0s   0%     42s  "Ashfell is 25% won over"
+ 60s  36%    261s  "Ashfell is 50% won over"
+180s  22%  <- it wandered off; attention matters
+320s  80%    311s  "Ashfell is 75% won over"
+380s  95%    370s  "Ashfell is nearly yours - 90% in awe of you"
+492s  TAKEN  472s  "Ashfell has joined you"        how=awe
+```
+
+**Eight minutes for a bloodless conquest**, legible the whole way, with a real
+dip in the middle when the animal lost interest.
+
+### The mistake I made measuring it
+
+Between the broken run and the working one I spent four probes chasing a bug
+that did not exist - the meter reading 0% while the creature was demonstrably
+performing 22 times in three minutes. The grant events eventually gave it away:
+
+```
+townName: "Your people"
+```
+
+**I was watching the wrong town.** Every probe had been running in the same
+long-lived page, and seventeen minutes of simulation later the world had moved
+on: towns had changed hands, and the creature was courting one I was not
+measuring. Two of my "findings" in between - that villagers walk away mid-dance,
+that the grace was not firing - were artefacts of a contaminated fixture.
+
+A soak is a fixture. Reusing one across experiments is the same mistake as
+reusing a database between tests, and it cost more time here than the feature.
+
+---
+
+## Addendum — the fifth civilisation had no ring
+
+Reported while zoomed out: the fifth empire has no coloured band around it.
+
+```js
+const MAX_RINGS = 4;          // and, separately, in the shader:
+uniform vec3 uInfCenter[4];
+for (int i = 0; i < 4; i++)
+```
+
+Correct when the island held the player and three rivals. The Phase 20 picker
+lets you start **five**, and `setInfluenceRings` clamps with `Math.min` - so the
+fifth ring was not dropped loudly, it simply never appeared.
+
+The number was written **twice**, once in JavaScript and once as a literal
+inside the shader source, which is exactly how it got out of step. It is
+`CIVS.MAX` now, interpolated into the GLSL, so the picker and the shader cannot
+disagree again - the same "one number moves them all" rule `setCivilisations`
+already follows for the other five.
