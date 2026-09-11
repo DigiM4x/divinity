@@ -48,7 +48,7 @@
 // ---------------------------------------------------------------------------
 import * as THREE from 'three';
 import { mulberry32 } from './lib/noise.js';
-import { CREATURE, CREATURE_TRAITS, EARNED_TRAITS, PET_TEMPERAMENT, LEASH_MODES, DESIRE_AXIS, WORLD, KINSHIP, KINSHIP_LEAK, PRAYER, RIVAL_GOD, TOWN} from './state.js';
+import { CREATURE, CREATURE_TRAITS, EARNED_TRAITS, PET_TEMPERAMENT, LEASH_MODES, DESIRE_AXIS, WORLD, KINSHIP, KINSHIP_LEAK, PRAYER, RIVAL_GOD, TOWN, PET_KIND, NATURES, NATURE_EDGE, natureBeats, BLESSING, blessingTier} from './state.js';
 
 /** Scratch colour for the rival banner tint. Module-level: read immediately. */
 const _banner = new THREE.Color();
@@ -415,9 +415,32 @@ export function initCreature(state, opts = {}) {
     return m;
   }
 
+  /**
+   * WHAT THIS BODY IS. See PET_KIND: weight is flat strength, nature is the
+   * matchup ring. Both belong to the SPECIES, so they are re-read whenever the
+   * animal changes and are not part of anything the creature has learned.
+   *
+   * An unknown key falls back to the middle of the range rather than to zero -
+   * a body with no entry should be unremarkable, not weightless.
+   */
+  let kind = { nature: 'hunter', weight: 1.0 };
+
+  /**
+   * THE BLESSING. See BLESSING in state.js for why the roll is random and why
+   * it multiplies attack and nothing else.
+   *
+   * Three numbers rather than one object because they are read on the hot path
+   * by attackPower, and because a blessing that has run out must leave NOTHING
+   * behind - `blessMult` returning to exactly 1 is the whole of the expiry.
+   */
+  let blessMult = 1;
+  let blessUntil = 0;
+  let blessNext = 0;
+
   /** Adopt the temperament of a species. */
   function setTemperament(key) {
     temperament = PET_TEMPERAMENT[key] ?? [];
+    kind = PET_KIND[key] ?? { nature: 'hunter', weight: 1.0 };
     refold();
   }
 
@@ -838,7 +861,8 @@ export function initCreature(state, opts = {}) {
 
   /** Attack power of one swipe, doubled while fighting under the banner. */
   function attackPower() {
-    return CREATURE.WAR_ATTACK * temper.attack * (atWar() ? CREATURE.WAR_MULT : 1);
+    return CREATURE.WAR_ATTACK * temper.attack * kind.weight * blessMult
+      * (atWar() ? CREATURE.WAR_MULT : 1);
   }
 
   /**
@@ -852,7 +876,8 @@ export function initCreature(state, opts = {}) {
    */
   function defensePower() {
     const inBattle = atWar() || withdrawn;
-    return CREATURE.WAR_DEFENSE * temper.defense * (inBattle ? CREATURE.WAR_MULT : 1);
+    return CREATURE.WAR_DEFENSE * temper.defense * kind.weight
+      * (inBattle ? CREATURE.WAR_MULT : 1);
   }
 
   /** Is the creature answering an attack order right now? */
@@ -1099,7 +1124,11 @@ export function initCreature(state, opts = {}) {
         // routs itself when it has had enough. Nothing here needs to know how
         // any of that works.
         const was = t.ref.inField;
-        t.ref.takeDamage(atk * (CREATURE.WAR_ATTACK_CREATURE / CREATURE.WAR_ATTACK),
+        // THE RING, and only here. Against soldiers weight is the whole story -
+        // a wall of spears does not care what a fox has an advantage over.
+        const edge = natureBeats(kind.nature, t.ref.nature) ? NATURE_EDGE : 1;
+        t.ref.takeDamage(
+          atk * (CREATURE.WAR_ATTACK_CREATURE / CREATURE.WAR_ATTACK) * edge,
           'creature');
         state.fx?.burst(t.ref.position, 8, 0xd94f3a);
         lastType = 'creature';
@@ -1613,6 +1642,14 @@ export function initCreature(state, opts = {}) {
   function simStep(dt) {
     age += dt;
     lastActionAge += dt;
+
+    // A blessing ends by the clock, not by a fight ending - so one cast can
+    // cover a retreat and a second charge, and a cast wasted on a walk across
+    // the island is genuinely wasted.
+    if (blessMult !== 1 && state.time >= blessUntil) {
+      blessMult = 1;
+      say('the blessing fades');
+    }
 
     // --- needs ---
     needs.hunger = Math.min(1, needs.hunger + CREATURE.HUNGER_RATE * temper.hunger * dt);
@@ -2295,6 +2332,59 @@ export function initCreature(state, opts = {}) {
      * is derived from the war front and would recurse - see nearestBeastIntruder.
      */
     get peaceful() { return !!LEASH_MODES[leash]?.peaceful; },
+    /** Species matchup. See PET_KIND and NATURES. */
+    get nature() { return kind.nature; },
+
+    /** The live blessing: 1 when there is none. See BLESSING. */
+    get blessMult() { return blessMult; },
+    /** Seconds of blessing left, 0 when none - for the HUD's bar. */
+    get blessLeft() { return Math.max(0, blessUntil - state.time); },
+    /** Seconds until this god may cast again, 0 when ready. */
+    get blessCooldown() { return Math.max(0, blessNext - state.time); },
+    /** The word for the current roll, or null. See BLESSING.TIERS. */
+    get blessTier() { return blessMult > 1 ? blessingTier(blessMult) : null; },
+
+    /**
+     * REACH DOWN AND MAKE IT HIT HARDER.
+     *
+     * The player pays belief; a rival god pays nothing and waits far longer
+     * instead (see BLESSING.RIVAL_COOLDOWN) because it has no belief to spend.
+     * Belief is read straight off `state.resources` rather than through
+     * miracles.js - systems here never import one another, and belief is shared
+     * state in exactly the way food is.
+     *
+     * Returns what happened so the caller can say it out loud; it never toasts
+     * for a rival, whose god has no screen.
+     */
+    bless() {
+      if (health <= 0) return { ok: false, reason: 'it is down' };
+      const wait = blessNext - state.time;
+      if (wait > 0) return { ok: false, reason: `${Math.ceil(wait)}s until you may again` };
+      if (isHuman) {
+        if (state.resources.belief < BLESSING.COST) {
+          return { ok: false, reason: `needs ${BLESSING.COST} belief` };
+        }
+        state.resources.belief -= BLESSING.COST;
+      }
+
+      // The roll. Squared toward the low end: a FURY should be a thing that
+      // happens to you a few times a match, not every third cast. A flat
+      // uniform roll made the top tier a one-in-four and the word stopped
+      // meaning anything.
+      const r = rand() ** 1.7;
+      blessMult = BLESSING.MIN + r * (BLESSING.MAX - BLESSING.MIN);
+      blessUntil = state.time + BLESSING.SECONDS;
+      blessNext = state.time + (isHuman ? BLESSING.COOLDOWN : BLESSING.RIVAL_COOLDOWN);
+
+      const tier = blessingTier(blessMult);
+      say(`blessed: ${tier.label}`);
+      state.events.emit('creature-blessed', {
+        faction, mult: blessMult, tier: tier.label, isHuman
+      });
+      return { ok: true, mult: blessMult, tier };
+    },
+    get natureLabel() { return NATURES[kind.nature]?.label ?? kind.nature; },
+    get weight() { return kind.weight; },
     /**
      * Still in the fight: alive, not routed, not withdrawn, not on a peaceful
      * leash.

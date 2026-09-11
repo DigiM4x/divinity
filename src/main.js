@@ -8,7 +8,7 @@
 // `state`; main.js is the only module that knows all of them exist.
 // ---------------------------------------------------------------------------
 import * as THREE from 'three';
-import { createState, createEvents, SIM_DT, MAX_SIM_STEPS_PER_FRAME, WORLD, CAMERA, TOWN, CREATURE, BUILDINGS, endGame, BIOMES, STONE_PIECES, FLORA, SCENERY, BUDGET, GRAVEYARD, VILLAGER, CIVS, setCivilisations, RIVAL_GOD} from './state.js';
+import { createState, createEvents, SIM_DT, MAX_SIM_STEPS_PER_FRAME, WORLD, CAMERA, TOWN, CREATURE, BUILDINGS, endGame, BIOMES, STONE_PIECES, FLORA, SCENERY, BUDGET, GRAVEYARD, VILLAGER, CIVS, setCivilisations, RIVAL_GOD, BLESSING} from './state.js';
 import { initInput } from './input.js';
 import { initTerrain } from './terrain.js';
 import { initCamera } from './camera.js';
@@ -570,6 +570,19 @@ function frame(now) {
   if (state.input.keyPressed('Digit2')) state.creature.setLeash('compassion');
   if (state.input.keyPressed('Digit3')) state.creature.setLeash('aggression');
   if (state.input.keyPressed('Digit4')) state.creature.setLeash('free');
+  // V BLESSES. B is build, so the god's other reach-down takes V.
+  //
+  // The roll is announced rather than merely applied - a random effect the
+  // player cannot see the result of is indistinguishable from no effect, and
+  // they have just spent 45 belief on it.
+  if (state.input.keyPressed('KeyV')) {
+    const res = state.creature?.bless?.();
+    if (res?.ok) {
+      state.ui.toast(`${res.tier.label} — ${res.mult.toFixed(1)}x for ${BLESSING.SECONDS}s`);
+    } else if (res) {
+      state.ui.toast(res.reason);
+    }
+  }
   if (state.input.keyPressed('KeyP')) {
     state.paused = !state.paused;
     state.ui.toast(state.paused ? 'Paused' : 'Resumed');

@@ -4,7 +4,7 @@
 //
 // Publishes state.ui: { update, toast, setDebugVisible, toggleBuildMenu }
 // ---------------------------------------------------------------------------
-import { BUILDINGS, MIRACLES, TRAITS, CREATURE_TRAITS, PET_TEMPERAMENT, COMBAT, LEASH_MODES, CREATURE} from './state.js';
+import { BUILDINGS, MIRACLES, TRAITS, CREATURE_TRAITS, PET_TEMPERAMENT, COMBAT, LEASH_MODES, CREATURE, PET_KIND, NATURES, BLESSING} from './state.js';
 
 const CSS = `
 #hud .panel {
@@ -283,6 +283,9 @@ const CSS = `
   text-transform: uppercase; color: #fff3d9;
 }
 #hud .zoo .sub2 { margin: 0 0 14px; font-size: 11px; opacity: 0.5; }
+/* The ring, stated once at the top rather than implied by twenty-four badges. */
+#hud .zoo .sub2 .ring { display: inline-block; margin-top: 5px; opacity: 0.95; }
+#hud .zoo .sub2 .ring b { font-weight: 600; }
 #hud .zoo .grid {
   display: grid; grid-template-columns: repeat(8, 78px); gap: 8px;
   max-height: 58vh; overflow-y: auto;
@@ -299,6 +302,18 @@ const CSS = `
 #hud .zoo .cell.active span { opacity: 1; color: #ffe9b8; }
 #hud .zoo .cell .temper { font-size: 9px; opacity: 0.5; color: #8fd8ff; margin-top: 2px; }
 #hud .zoo .cell.active .temper { opacity: 0.85; }
+/* The nature reads as a badge rather than another line of grey text, because
+   it is the one thing on the card that decides a fight against another god's
+   animal and it has to survive a glance across twenty-four of them. */
+#hud .zoo .cell .nat {
+  font-size: 8.5px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--nat); margin-top: 3px; opacity: 0.9;
+}
+#hud .zoo .cell .nat b { font-weight: 600; }
+#hud .zoo .cell .nat em {
+  font-style: normal; color: #efe9dd; opacity: 0.45; letter-spacing: 0.04em;
+  text-transform: none; font-size: 9px;
+}
 
 /* --- achievements --- */
 #hud .acts {
@@ -585,6 +600,27 @@ const CSS = `
   padding-top: 7px; border-top: 1px solid rgba(255,255,255,0.10);
   font-size: 10px;
 }
+/* THE BLESSING ROW. Hidden by height rather than by display:none so that it
+   opens and closes smoothly - the panel is pinned to a corner and a row that
+   pops into existence shoves everything above it. */
+#hud .beast .bless {
+  position: relative; display: flex; align-items: baseline; gap: 6px;
+  height: 0; opacity: 0; overflow: hidden; margin: 0;
+  transition: height 0.22s ease, opacity 0.22s ease, margin 0.22s ease;
+}
+#hud .beast .bless.on { height: 13px; opacity: 1; margin: 3px 0 5px; }
+#hud .beast .bless .tier {
+  font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+  text-shadow: 0 0 10px currentColor;
+}
+#hud .beast .bless .mult { font-size: 9px; opacity: 0.5; letter-spacing: 0.06em; }
+/* The countdown runs under the words rather than beside them: the row is a
+   deadline, and a bar draining left to right says that without a number. */
+#hud .beast .bless u {
+  position: absolute; left: 0; bottom: 0; height: 1.5px; border-radius: 1px;
+  transition: width 0.25s linear; box-shadow: 0 0 8px currentColor;
+}
+
 #hud .beast .leash { display: flex; align-items: center; gap: 5px; opacity: 0.75; }
 #hud .beast .pip { width: 7px; height: 7px; border-radius: 50%; flex: none; box-shadow: 0 0 7px currentColor; }
 #hud .beast .st { margin-left: auto; letter-spacing: 0.11em; text-transform: uppercase; font-size: 9px; }
@@ -650,6 +686,7 @@ export function initUi(state) {
       <div><b>Drag the banner</b> &mdash; send your platoon</div>
       <div><b>K</b> achievements &nbsp; <b>R</b> prayers &nbsp; <b>Tab</b> reckoning &nbsp; <b>M</b> mute &nbsp; <b>N</b> new island</div>
       <div><b>B</b> build &nbsp; <b>C</b> creature &nbsp; <b>G</b> mind &nbsp; <b>F</b> debug &nbsp; <b>P</b> pause</div>
+      <div><b>V</b> bless your creature &mdash; ${BLESSING.COST} belief, a random ${BLESSING.MIN}-${BLESSING.MAX}x attack</div>
     </div>
     <div class="panel buildbar" id="hud-buildbar">
       <div class="hint">Press <b>B</b> to build</div>
@@ -806,13 +843,29 @@ export function initUi(state) {
       // wardrobe, so it goes on the card rather than being discovered later.
       const temper = (PET_TEMPERAMENT[a.key] ?? [])
         .map((k) => CREATURE_TRAITS[k]?.label ?? k).join(' &middot; ');
+      // Nature and weight: the two things that decide what happens when this
+      // body meets another god's in the open. See PET_KIND.
+      const k = PET_KIND[a.key];
+      const nat = k ? NATURES[k.nature] : null;
+      const badge = k && nat
+        ? `<span class="nat" style="--nat:${nat.color}"><b>${nat.label}</b> ` +
+          `<em>&times;${k.weight.toFixed(2)}</em></span>`
+        : '';
       return `<div class="cell${active}" data-key="${a.key}">${img}<span>${a.label}</span>` +
-        `<span class="temper">${temper}</span></div>`;
+        `${badge}<span class="temper">${temper}</span></div>`;
     }).join('');
     elZoo.innerHTML =
       `<div class="panel2"><h3>Choose your creature</h3>` +
       `<p class="sub2">It keeps everything it has learned &mdash; but the body ` +
-      `brings its own temperament, and that changes how it fights and learns.</p>` +
+      `brings its own temperament, and that changes how it fights and learns.<br>` +
+      `<span class="ring">` +
+      `<b style="color:${NATURES.hunter.color}">Hunter</b> runs down ` +
+      `<b style="color:${NATURES.runner.color}">Runner</b> &rarr; ` +
+      `<b style="color:${NATURES.runner.color}">Runner</b> circles ` +
+      `<b style="color:${NATURES.bulwark.color}">Bulwark</b> &rarr; ` +
+      `<b style="color:${NATURES.bulwark.color}">Bulwark</b> shrugs off ` +
+      `<b style="color:${NATURES.hunter.color}">Hunter</b>. ` +
+      `The number is raw strength.</span></p>` +
       `<div class="grid">${cells}</div></div>`;
 
     elZoo.querySelectorAll('.cell').forEach((el) => {
@@ -1019,6 +1072,16 @@ export function initUi(state) {
   // three, and its size is bounded by towns x factions x marks.
   const AWE_MARKS = [0.25, 0.5, 0.75, 0.9];
   const aweSaid = new Set();
+  // A RIVAL GOD REACHED DOWN. Worth a toast even though it is happening to
+  // somebody else's animal: it is the only signal the player gets that the
+  // other four gods have the same button, and a beast that suddenly hits three
+  // times harder with no explanation reads as a bug.
+  state.events?.on('creature-blessed', (e) => {
+    if (e?.isHuman) return;      // the player's own is announced by main.js
+    const c = state.creatures?.find((x) => x.faction === e.faction);
+    toast(`${c?.ownerName ?? 'A rival god'} blesses its beast — ${e.tier}`);
+  });
+
   state.events?.on('awe-changed', (e) => {
     if (!e?.town) return;
     const mine = e.by === 0;
@@ -1448,6 +1511,9 @@ export function initUi(state) {
       `<div class="lg"><span>Stamina</span><span class="v" id="b-st-n"></span></div>` +
       `<div class="bar"><i id="b-fd"></i></div>` +
       `<div class="lg"><span>Fed</span><span class="v" id="b-fd-n"></span></div>` +
+      `<div class="bless" id="b-bless"><span class="tier" id="b-bless-t"></span>` +
+      `<span class="mult" id="b-bless-m"></span>` +
+      `<u id="b-bless-b"></u></div>` +
       `<div class="ft"><span class="leash"><span class="pip" id="b-pip"></span>` +
       `<span id="b-leash"></span></span><span class="st" id="b-state"></span></div>`;
     const id = (k) => document.getElementById(k);
@@ -1456,6 +1522,8 @@ export function initUi(state) {
       hp: id('b-hp'), hpGhost: id('b-hp-g'), hpNum: id('b-hp-n'),
       st: id('b-st'), stNum: id('b-st-n'),
       fd: id('b-fd'), fdNum: id('b-fd-n'),
+      bless: id('b-bless'), blessTier: id('b-bless-t'),
+      blessMult: id('b-bless-m'), blessBar: id('b-bless-b'),
       pip: id('b-pip'), leash: id('b-leash'), state: id('b-state')
     };
   }
@@ -1524,7 +1592,26 @@ export function initUi(state) {
     const grown = Math.round(((c.scale - CREATURE.START_SCALE)
       / (CREATURE.MAX_SCALE - CREATURE.START_SCALE)) * 100);
     b.nm.textContent = species || 'creature';
-    b.tr.innerHTML = `${c.temperamentLabels.join(' &middot; ')}<br>grown ${grown}%`;
+    // Nature sits with the temperament because they are the same kind of fact:
+    // what this body is, as opposed to what it currently has.
+    const nat = NATURES[c.nature];
+    b.tr.innerHTML = `${c.temperamentLabels.join(' &middot; ')}<br>` +
+      `<span style="color:${nat?.color ?? '#efe9dd'}">${c.natureLabel}</span> ` +
+      `&times;${c.weight.toFixed(2)} &middot; grown ${grown}%`;
+
+    // The blessing, while one is running. The row collapses entirely when there
+    // is none - a permanently empty bar labelled "blessing" would read as a
+    // resource the player has failed to fill rather than a thing that happens.
+    const tier = c.blessTier;
+    b.bless.classList.toggle('on', !!tier);
+    if (tier) {
+      b.blessTier.textContent = tier.label;
+      b.blessTier.style.color = tier.color;
+      b.blessMult.textContent = `${c.blessMult.toFixed(1)}x attack`;
+      b.blessBar.style.width = `${(c.blessLeft / BLESSING.SECONDS) * 100}%`;
+      b.blessBar.style.background = tier.color;
+      b.blessBar.style.color = tier.color;
+    }
 
     const mode = LEASH_MODES[c.leash];
     b.pip.style.background = '#' + (mode?.color ?? 0xffffff).toString(16).padStart(6, '0');

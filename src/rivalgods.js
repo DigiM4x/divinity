@@ -192,6 +192,14 @@ export function initRivalGods(state) {
     const c = g.creature;
 
     if (stance === 'war') {
+      // REACH DOWN, same as the player does with V.
+      //
+      // Only in a war, and only while the creature is actually in the fight -
+      // a rival god casting on the walk out would burn its long cooldown on an
+      // empty field and arrive with nothing. It pays no belief because it has
+      // none; BLESSING.RIVAL_COOLDOWN is what it pays instead.
+      if (c.fighting && c.blessCooldown <= 0 && c.blessMult === 1) c.bless();
+
       const front = state.combat?.frontFor?.(g.faction);
       if (front) {
         c.summon(front.x, front.z, RIVAL_GOD.FRONT_RADIUS);

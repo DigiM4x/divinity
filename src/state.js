@@ -444,14 +444,26 @@ export const RIVAL_GOD = {
    * seen, fought or beaten.
    *
    * Chosen for TEMPERAMENT SPREAD, since temperament is most of what makes two
-   * rival gods play differently:
+   * rival gods play differently - and now for NATURE SPREAD as well:
    *
-   *   lion      ferocious + thickHided   a brawler that survives what it starts
-   *   elephant  thickHided + greedy      slow, hard to kill, always hungry
-   *   tiger     ferocious + fleet        hits hard, dies faster, arrives first
-   *   polar     ferocious + greedy       a man-eater if its god lets it be one
+   *   lion      hunter  1.35   ferocious + thickHided  brawler, survives it
+   *   elephant  bulwark 1.60   thickHided + greedy     slow, hard, always hungry
+   *   deer      runner  1.00   fleet + ascetic         arrives first, eats least
+   *   polar     hunter  1.45   ferocious + greedy      a man-eater, if allowed
+   *
+   * THE RING HAS TO BE ON THE BOARD. This list used to be lion, elephant, tiger
+   * and polar, which under PET_KIND is three Hunters and one Bulwark and NOT A
+   * SINGLE RUNNER - so the matchup ring could never once come up between two
+   * rival gods, and a player who picked any Bulwark had an edge over three of
+   * the four opponents and gave one away to nobody. Tiger went and deer came in:
+   * it keeps tiger's "arrives first" through Fleet, and Ascetic is a trait no
+   * other god fields.
+   *
+   * The four now close the triangle among themselves - deer beats elephant,
+   * lion and polar beat deer, elephant beats lion and polar - so the system is
+   * live in a match where the player does nothing at all.
    */
-  ANIMALS: ['animal-lion', 'animal-elephant', 'animal-tiger', 'animal-polar'],
+  ANIMALS: ['animal-lion', 'animal-elephant', 'animal-deer', 'animal-polar'],
 
   /**
    * How much of a rival creature's own colour shows through.
@@ -2861,6 +2873,159 @@ export const EARNED_TRAITS = {
  * than hashed from the name, because the whole point is that the lion should
  * read as a lion the moment you pick it.
  */
+/**
+ * WHAT AN ANIMAL IS, as opposed to how it behaves.
+ *
+ * PET_TEMPERAMENT below says how a creature LEARNS and what it wants. It is
+ * deliberately balanced - every trait has an opposite in the same group, so
+ * Ferocious costs you Gentle and nothing is strictly better than anything else.
+ * That is right for a mind and useless as a pecking order: it cannot say that
+ * an elephant would flatten a bee.
+ *
+ * So there are two more numbers, and they are kept apart from temperament
+ * because each does exactly one job:
+ *
+ *   TEMPERAMENT   how it behaves and learns   (existing, balanced)
+ *   WEIGHT        how much of it there is     (flat strength)
+ *   NATURE        who it beats                (the matchup)
+ *
+ * WEIGHT is the honest part: a bee is a bee. It scales attack and defense
+ * together, so a heavy animal is simply harder to fight, and nothing about
+ * cleverness or courage changes that.
+ *
+ * NATURE is what stops weight being destiny. Three of them in a ring, so the
+ * biggest thing on the island still has something it would rather not meet:
+ *
+ *      HUNTER  catches the swift        ->  beats RUNNER
+ *      RUNNER  circles the heavy        ->  beats BULWARK
+ *      BULWARK shrugs off tooth and claw ->  beats HUNTER
+ *
+ * A bee will never beat an elephant - it is a twentieth of the mass - but a fox
+ * that picks its fights can take something bigger than itself, and a player who
+ * knows the ring can choose a body to answer the one over the hill.
+ *
+ * The ring only applies BEAST AGAINST BEAST. Against soldiers only weight
+ * counts: a wall of spears does not care what a fox has an advantage over.
+ */
+export const NATURES = {
+  hunter: { label: 'Hunter', beats: 'runner', note: 'runs down the swift', color: '#ff9d7a' },
+  runner: { label: 'Runner', beats: 'bulwark', note: 'circles the heavy', color: '#8fd8ff' },
+  bulwark: { label: 'Bulwark', beats: 'hunter', note: 'shrugs off tooth and claw', color: '#9be08a' }
+};
+
+/**
+ * Damage multiplier for holding the advantage in the ring.
+ *
+ * 1.6 is sized to be worth roughly the gap between two neighbouring weight
+ * classes - enough that the matchup decides an even fight and tilts an uneven
+ * one, not enough to let a chick kill a polar bear.
+ */
+export const NATURE_EDGE = 1.6;
+
+/**
+ * The twenty-four, weighed and sorted.
+ *
+ * `weight` runs about 0.45 to 1.6 and multiplies attack and defense together.
+ * Sized by what the animal plainly is rather than by what would balance neatly -
+ * the elephant is the heaviest thing here because it is an elephant.
+ *
+ * Natures are split eight, eight and eight, so no corner of the ring is rare.
+ */
+export const PET_KIND = {
+  // --- hunters: teeth, claws, stings -------------------------------------
+  'animal-lion': { nature: 'hunter', weight: 1.35 },
+  'animal-tiger': { nature: 'hunter', weight: 1.35 },
+  'animal-polar': { nature: 'hunter', weight: 1.45 },
+  'animal-fox': { nature: 'hunter', weight: 0.85 },
+  'animal-cat': { nature: 'hunter', weight: 0.80 },
+  'animal-dog': { nature: 'hunter', weight: 0.95 },
+  'animal-hog': { nature: 'hunter', weight: 1.10 },
+  /** Tiny, and it is still the thing everything else flinches from. */
+  'animal-bee': { nature: 'hunter', weight: 0.45 },
+
+  // --- bulwarks: mass, shell, hide ---------------------------------------
+  'animal-elephant': { nature: 'bulwark', weight: 1.60 },
+  'animal-giraffe': { nature: 'bulwark', weight: 1.30 },
+  'animal-cow': { nature: 'bulwark', weight: 1.25 },
+  'animal-panda': { nature: 'bulwark', weight: 1.20 },
+  'animal-penguin': { nature: 'bulwark', weight: 0.85 },
+  'animal-koala': { nature: 'bulwark', weight: 0.85 },
+  'animal-crab': { nature: 'bulwark', weight: 0.60 },
+  'animal-caterpillar': { nature: 'bulwark', weight: 0.50 },
+
+  // --- runners: legs, wings, fins ----------------------------------------
+  'animal-deer': { nature: 'runner', weight: 1.00 },
+  'animal-pig': { nature: 'runner', weight: 0.95 },
+  'animal-beaver': { nature: 'runner', weight: 0.85 },
+  'animal-monkey': { nature: 'runner', weight: 0.80 },
+  'animal-bunny': { nature: 'runner', weight: 0.65 },
+  'animal-parrot': { nature: 'runner', weight: 0.65 },
+  'animal-fish': { nature: 'runner', weight: 0.60 },
+  'animal-chick': { nature: 'runner', weight: 0.50 }
+};
+
+/** Does `a` hold the advantage over `b` in the ring? Neither, if they match. */
+export function natureBeats(a, b) {
+  return !!a && !!b && NATURES[a]?.beats === b;
+}
+
+/**
+ * THE BLESSING - a god reaching down and making the animal hit harder.
+ *
+ * WHY IT IS RANDOM. A fixed multiplier for a fixed price is a shop, and the
+ * player would simply buy it before every fight and never think about it again.
+ * A roll makes the cast a decision: you are spending belief on a CHANCE, and
+ * the moment you choose to spend it is the interesting part. Roll badly on the
+ * opening of a siege and you have to decide whether to pay again or fight with
+ * what you got.
+ *
+ * ONE RANDOM AXIS, NOT TWO. The duration is fixed and the price is fixed. Only
+ * the strength rolls. If all three moved the player could never learn what a
+ * blessing is worth, and the whole thing would read as noise rather than luck.
+ *
+ * IT IS ATTACK ONLY. It never touches defense, health or speed - a blessed
+ * animal is dangerous, not safe, so the fight it buys you is still a fight, and
+ * a blessing cast on a beast that is already losing does not simply undo the
+ * loss.
+ *
+ * RIVALS GET IT TOO. See rivalgods.js. The last rework of this game existed
+ * because only the player could win with an animal; handing the player a damage
+ * button the other four gods cannot press would rebuild exactly that fault. A
+ * rival pays no belief - it has none to pay - so it pays in patience instead:
+ * RIVAL_COOLDOWN is far longer, and a rival may only bless a creature that is
+ * already at war, where the player may bless whenever it pleases them.
+ */
+export const BLESSING = {
+  /** Belief per cast. Flat, so the gamble is the outcome and never the price. */
+  COST: 45,
+  /** How long a roll lasts. Long enough to cross a field and reach the wall. */
+  SECONDS: 40,
+  /** The roll. 1.2 is a disappointment you feel; 3.0 is a rout. */
+  MIN: 1.2,
+  MAX: 3.0,
+  /** Casting again before this replaces the roll - including a worse one. */
+  COOLDOWN: 25,
+  /** A rival god's version: free, far rarer, and only ever cast in a war. */
+  RIVAL_COOLDOWN: 95,
+
+  /**
+   * WHAT THE ROLL IS CALLED. The player cannot read a multiplier off a HUD in
+   * the middle of a siege, but they can read one word. Ordered strongest first
+   * and read top-down, so the last entry is the floor and always matches.
+   */
+  TIERS: [
+    { at: 2.6, label: 'FURY', color: '#ff7a5c' },
+    { at: 2.0, label: 'Wrath', color: '#ffb05c' },
+    { at: 1.55, label: 'Blessing', color: '#ffe08a' },
+    { at: 0, label: 'A whisper', color: '#cbd6e6' }
+  ]
+};
+
+/** Which tier a rolled multiplier falls in. See BLESSING.TIERS. */
+export function blessingTier(mult) {
+  return BLESSING.TIERS.find((t) => mult >= t.at) ?? BLESSING.TIERS[BLESSING.TIERS.length - 1];
+}
+
 export const PET_TEMPERAMENT = {
   'animal-beaver': ['clever', 'thickHided'],
   'animal-bee': ['ferocious', 'fleet'],
@@ -3501,6 +3666,9 @@ const EVENT_FIELDS = {
    * keeping its own copy of the meter.
    */
   'awe-changed': ['town', 'by', 'from', 'to', 'why'],
+  // A god reached down. `isHuman` rather than a faction test at the listener,
+  // for the same reason `byPlayer` sits beside `by` above. See BLESSING.
+  'creature-blessed': ['faction', 'mult', 'tier', 'isHuman'],
 
   // --- Phase 16 ------------------------------------------------------------
   // Facts the prayer system needs that no existing emitter was reporting.

@@ -93,6 +93,14 @@ export const UI_SOUNDS = {
   /** "Not enough belief", "too close to a building" - anything refused. */
   refuse: { clip: ['lowRandom'], gain: 0.35, cool: 0.25 },
 
+  /**
+   * A god blessing its creature. The top tier gets the achievement fanfare -
+   * a FURY is rare enough to deserve it, and hearing which roll you got before
+   * you can read it is the point.
+   */
+  bless: { clip: ['powerUp5', 'powerUp9'], gain: 0.7, cool: 0.3 },
+  blessBig: { clip: ['powerUp11'], gain: 0.9, cool: 0.3 },
+
   /** The end of the match. */
   victory: { clip: ['powerUp11'], gain: 1.0, cool: 4 },
   defeat: { clip: ['lowThreeTone'], gain: 0.9, cool: 4 }

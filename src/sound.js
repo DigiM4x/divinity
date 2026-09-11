@@ -254,6 +254,11 @@ export function initSound(state) {
   on('resource-offered', (e) => world('deposit', e?.pos));
 
   on('achievement-earned', () => ui('achievement'));
+  // Only the player's own god gets a fanfare. A rival blessing its beast across
+  // the island is news, but it is the HUD's news, not a sound in your ear.
+  on('creature-blessed', (e) => {
+    if (e?.isHuman) ui(e.tier === 'FURY' ? 'blessBig' : 'bless');
+  });
   on('score-milestone', () => ui('milestone'));
 
   on('prayer-raised', (e) => play(CFG.UI_SOUNDS, 'prayerRaised', e?.pos));
