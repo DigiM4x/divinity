@@ -373,10 +373,13 @@ export function initCombat(state) {
     let best = null;
     let bestScore = Infinity;
 
-    const consider = (ref, pos, kind) => {
+    // `weight` overrides the table for one call - used when a soldier is
+    // sacking rather than fighting. The KIND stays what it is, because half a
+    // dozen places downstream switch on it; only its attractiveness changes.
+    const consider = (ref, pos, kind, weight) => {
       const d2 = (pos.x - s.pos.x) ** 2 + (pos.z - s.pos.z) ** 2;
       if (d2 > R2) return;
-      const score = Math.sqrt(d2) * W[kind];
+      const score = Math.sqrt(d2) * (weight ?? W[kind]);
       if (score < bestScore) { bestScore = score; best = { ref, pos, kind }; }
     };
 
@@ -398,8 +401,15 @@ export function initCombat(state) {
       }
     }
     if (state.town) {
+      // A soldier standing in a town it is besieging is there to level it, so
+      // the houses stop being the last thing on its list. See
+      // COMBAT.SACK_BUILDING_WEIGHT.
       for (const b of state.town.allBuildings) {
-        if (hostile(b.town, s.town)) consider(b, b.pos, 'building');
+        if (!hostile(b.town, s.town)) continue;
+        const sacking = (b.town.besiegedBy ?? 0) > 0
+          && s.pos.distanceTo(b.town.centre) <= b.town.influenceRadius;
+        consider(b, b.pos, 'building',
+          sacking ? COMBAT.SACK_BUILDING_WEIGHT : undefined);
       }
     }
     return best;
@@ -845,7 +855,9 @@ export function initCombat(state) {
       const elapsed = state.time - town.raidStarted;
       if (!hostile(town.warTarget, town)) {
         callOffRaid(town, 'nothing left to take');
-      } else if (elapsed > COMBAT.RAID_DURATION) {
+      } else if (elapsed > COMBAT.RAID_DURATION
+                 && state.time - (town.warTarget.lastRazedAt ?? -Infinity)
+                    > COMBAT.RAID_PROGRESS_GRACE) {
         callOffRaid(town, 'called home');
       } else if (partyOf(town) <= town.raidStrength * COMBAT.RAID_BREAK) {
         callOffRaid(town, 'the party is broken');
@@ -903,7 +915,24 @@ export function initCombat(state) {
 
     if (s.town.isPlayer) return markerPlaced ? rally : s.town.centre;
     // A rival in the raiding party marches on the target; everyone else holds.
-    if (s.raiding && s.town.warTarget) return s.town.warTarget.centre;
+    if (s.raiding && s.town.warTarget) {
+      // ...and once there, on the BUILDINGS. Under RAZE_BEFORE_KEEP the town
+      // has to be levelled before the keep can be touched, and a party that
+      // stands in the square waiting is a siege that never ends: a house on the
+      // far edge of a 120-unit territory is well outside SIGHT_RANGE, so it is
+      // never chosen as a target and never falls.
+      const wt = s.town.warTarget;
+      if (COMBAT.RAZE_BEFORE_KEEP && wt.buildings.length > 0) {
+        let near = null;
+        let bestD2 = Infinity;
+        for (const b of wt.buildings) {
+          const d2 = (b.pos.x - s.pos.x) ** 2 + (b.pos.z - s.pos.z) ** 2;
+          if (d2 < bestD2) { bestD2 = d2; near = b; }
+        }
+        if (near) return near.pos;
+      }
+      return wt.centre;
+    }
     return s.town.centre;
   }
 
@@ -997,6 +1026,17 @@ export function initCombat(state) {
 
     const defenders = defendersAt(town);
     if (defenders > 0) return; // the garrison holding THIS wall has to fall first
+
+    // THE TOWN COMES DOWN BEFORE THE KEEP DOES. See COMBAT.RAZE_BEFORE_KEEP.
+    // Until the ring is empty the wall is untouchable, so a siege is a job with
+    // a visible end rather than three men loitering in a square.
+    if (COMBAT.RAZE_BEFORE_KEEP && town.buildings.length > 0) {
+      if (!town.sackAnnounced && town.buildings.length <= 3 && town.owner === 0) {
+        town.sackAnnounced = true;
+        state.ui?.toast(`${town.name} is being levelled — ${town.buildings.length} left`);
+      }
+      return;
+    }
 
     if (town.wallHp > 0) {
       town.wallHp = Math.max(0, town.wallHp - attackers * COMBAT.SIEGE_DPS * dt);
@@ -1150,6 +1190,9 @@ export function initCombat(state) {
         { count: n, pos: slain.pos, cause: 'soldiers', byPlayer: f === 0, by: f });
     }
     for (const { b, by } of razed) {
+      // The siege is working, so the council does not call it home. See
+      // COMBAT.RAID_PROGRESS_GRACE.
+      b.town.lastRazedAt = state.time;
       // This read `!b.town.isPlayer` - "razed by whoever it did not belong to"
       // - which is an INFERENCE, and it was already wrong before Phase 20: two
       // rivals fighting each other razed rival buildings, the test asked only

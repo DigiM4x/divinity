@@ -1141,3 +1141,63 @@ inside the shader source, which is exactly how it got out of step. It is
 `CIVS.MAX` now, interpolated into the GLSL, so the picker and the shader cannot
 disagree again - the same "one number moves them all" rule `setCivilisations`
 already follows for the other five.
+
+
+---
+
+## Addendum — taking a town is a job you can see the end of
+
+Reported: *"the tactics of taking over the bases needs to be addressed, it's all
+wonkey right now. need a straight forward destroy all the buildings, then the
+castle method inside the ring."*
+
+The old order was: kill the garrison, stand three men in the square, and the wall
+came down under whoever happened to be nearby. **Buildings were incidental** -
+you could take a town with every house still standing - and what the player had
+to *do* to win a siege was never legible. Wonky was the right word.
+
+The rule is now the one you would guess:
+
+1. the garrison falls *(unchanged)*
+2. **every building inside the ring is razed**
+3. only then does the keep's wall take damage
+4. hold the breach, and it is yours *(unchanged)*
+
+The awe route bypasses all of it, which is the point of having two.
+
+### Three things had to change or it was impossible
+
+The first soak under the new rule produced **zero conquests in forty minutes** -
+every town that changed hands did so by awe, and not one wall was ever breached.
+Towns grow buildings faster than raiders can pull them down.
+
+| | |
+|---|---|
+| **Buildings were rebuilt under siege** | A town laying foundations while being levelled can outlast any siege. Nobody builds with an army in the square now. |
+| **Raiders never walked to the outlying houses** | They stood at the centre. A house on the far edge of a 120-unit territory is well outside `SIGHT_RANGE`, so it was never targeted and never fell. A raider now walks to the nearest standing building of its target. |
+| **The raid clock called them home mid-job** | `RAID_DURATION` exists to end *futile* raids. While the target is actually losing buildings the clock is pushed back; the moment progress stops it runs out as before. |
+
+Plus two numbers: `BUILDING_DPS` 2.4 → 4.5 (at 40 hit points a building took one
+soldier seventeen seconds), and a `SACK_BUILDING_WEIGHT` so a soldier inside a
+town it is besieging stops treating houses as the least interesting thing in
+sight - they are the whole job now.
+
+### Result
+
+Two forty-minute soaks, four and five civilisations:
+
+| | seed 31337 | seed 5150 |
+|---|---|---|
+| Conquests | 1 | 2 |
+| Awe captures | 1 | 2 |
+| Walls breached | 1 | 2 |
+
+Marrow's trace tells the story on its own: **21 buildings → 1 → breached at
+592s → taken by conquest** → then rebuilt by its new owner. The town was
+levelled and *then* it fell.
+
+Both routes alive, neither dominant, 0.139 ms/tick, reckoning validates.
+
+The island panel says which step a siege is on - *"14 buildings standing, then
+the keep"* - rather than leaving the player to wonder why the wall bar will not
+move yet.

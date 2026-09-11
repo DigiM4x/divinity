@@ -3260,6 +3260,29 @@ export const COMBAT = {
    */
   MARKER_RING: 5.2,
 
+  /**
+   * A TOWN IS TAKEN BY LEVELLING IT, THEN THE KEEP.
+   *
+   * The old order was: kill the garrison, stand three men in the square, and
+   * the wall came down under whoever happened to be nearby. Buildings were
+   * incidental - you could take a town with every house still standing - and
+   * what the player had to DO to win a siege was never legible. "Wonky" was the
+   * word for it and it was the right one.
+   *
+   * The rule now is the one you would guess:
+   *
+   *   1. the garrison has to fall           (unchanged)
+   *   2. every building inside the ring is razed
+   *   3. only then does the keep's wall take damage
+   *   4. hold the breach, and it is yours   (unchanged)
+   *
+   * It makes a siege an objective you can see the end of, and it makes the
+   * buildings your soldiers were already knocking down actually mean something.
+   *
+   * The awe route bypasses all of it, which is the point of having two.
+   */
+  RAZE_BEFORE_KEEP: true,
+
   /** Attackers needed inside the walls to force a surrender once breached. */
   CAPTURE_ATTACKERS: 3,
   /**
@@ -3308,6 +3331,19 @@ export const COMBAT = {
   THREAT_WEIGHT: { engine: 0.3, creature: 0.5, soldier: 0.45, villager: 0.85, building: 1.0 },
 
   /**
+   * What a building is worth to a soldier who is SACKING a town rather than
+   * fighting in one.
+   *
+   * Buildings are the least attractive target in the table above, which was
+   * right when razing them was incidental. Under RAZE_BEFORE_KEEP they are the
+   * whole job, and a raiding party that keeps chasing the last farmer round the
+   * fields while the houses stand is a siege that never ends. Applied only
+   * inside a town the soldier is besieging, so a defender still goes for the
+   * men in its streets.
+   */
+  SACK_BUILDING_WEIGHT: 0.30,
+
+  /**
    * Damage per second one soldier deals to the creature, in creature health.
    * Kept separate from DPS because the two are on different scales: a soldier
    * has 1 hit point and the creature has twenty. Ten men take about eleven
@@ -3320,7 +3356,15 @@ export const COMBAT = {
    * town reads as a fight over its streets rather than things blinking out.
    */
   BUILDING_HP: 40,
-  BUILDING_DPS: 2.4,
+  /**
+   * 4.5, up from 2.4, because levelling a town is now the job rather than a
+   * side effect. At 40 hit points a building took one soldier seventeen
+   * seconds; a party of seven needed a quarter of an hour to clear the
+   * hundred-odd buildings a grown rival sprawls to, and RAID_DURATION called
+   * them home long before that. A 40-minute soak under the new rule produced
+   * ZERO conquests - every town that changed hands did so by awe.
+   */
+  BUILDING_DPS: 4.5,
 
   /**
    * Putting a town's civilians to the sword. The single cruelest act available,
@@ -3363,6 +3407,15 @@ export const COMBAT = {
    * for the rest of the game.
    */
   RAID_DURATION: 150,
+  /**
+   * ...but a raid that is WORKING does not get called home.
+   *
+   * RAID_DURATION exists to end futile raids, not successful ones, and under
+   * RAZE_BEFORE_KEEP a siege is a long job by design. While the target is
+   * actually losing buildings the clock is pushed back; the moment the party
+   * stops making progress it runs out as before.
+   */
+  RAID_PROGRESS_GRACE: 30,
   /** A raid is called off if the party falls to this fraction of its strength. */
   RAID_BREAK: 0.35,
   /**

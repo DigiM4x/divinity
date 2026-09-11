@@ -1682,6 +1682,16 @@ export function initUi(state) {
             }
             const wall = Math.round((t.wallHp / 120) * 100);
             const def = state.combat?.countFor(t) ?? 0;
+            // THE SIEGE, AS A CHECKLIST. Under COMBAT.RAZE_BEFORE_KEEP a town
+            // falls in a fixed order, so the panel says which step you are on
+            // rather than leaving the player to infer it from a wall bar that
+            // will not move yet.
+            const left = t.buildings.length;
+            if (left > 0 && !t.breached) {
+              h += `<div class="lbl2" style="opacity:0.7">` +
+                   `<span style="color:#ffb86b">${left}</span> building${left === 1 ? '' : 's'} ` +
+                   `standing &middot; then the keep</div>`;
+            }
             // THE AWE BAR NOW SAYS WHAT IT IS FOR. It read "awe 0%" for
             // twelve phases, which is a number with no verb attached: nothing
             // anywhere told the player that filling it takes the town without a

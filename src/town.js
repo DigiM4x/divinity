@@ -1867,7 +1867,14 @@ export function initTown(state) {
       if (!town.breached && town.besiegedBy === 0 && town.wallHp < COMBAT.WALL_HP) {
         town.wallHp = Math.min(COMBAT.WALL_HP, town.wallHp + COMBAT.WALL_REGEN * dt);
       }
-      if (town.isPlayer) {
+      // NOBODY LAYS A FOUNDATION WITH AN ARMY IN THE SQUARE.
+      //
+      // Not flavour - it is what makes RAZE_BEFORE_KEEP possible at all. A town
+      // that keeps building while it is being levelled can outlast any siege,
+      // and the attacker is then chasing a number that goes back up behind it.
+      if ((town.besiegedBy ?? 0) > 0) {
+        // no work gets done
+      } else if (town.isPlayer) {
         selfBuildTick(town, dt);
       } else {
         rivalTick(town, dt);
