@@ -55,6 +55,8 @@ export function initAchievements(state) {
     razed: 0,
     townsTaken: 0,
     raidsOnYou: 0,
+    /** Towns that came over WITHOUT a fight. See town.capture's `how`. */
+    townsAwed: 0,
     // polled levels and peaks
     buildingsStanding: 0,
     buildingKinds: 0,
@@ -70,7 +72,16 @@ export function initAchievements(state) {
     creatureKills: 0,
     creatureBodies: 0,
     creatureGrown: 0,
-    believersThrown: 0
+    believersThrown: 0,
+    shrinesStanding: 0,
+    /**
+     * The highest awe you have ever held over a rival town, 0..100.
+     *
+     * Stored as a percentage for the same reason as peakGood: the underlying
+     * meter is 0..1 and a progress bar that only moves in its last hundredth
+     * tells the player nothing.
+     */
+    peakAwe: 0
   };
 
   // --- what has already been earned, across every session ------------------
@@ -152,7 +163,12 @@ export function initAchievements(state) {
   // once" - close enough for a first-building achievement, wrong in general.
   ev.on('building-placed', (e) => { if (e?.byPlayer) stats.built++; });
 
-  ev.on('town-captured', () => { stats.townsTaken++; });
+  ev.on('town-captured', (e) => {
+    stats.townsTaken++;
+    // Only the player's bloodless conversions. `by` is the faction that won it,
+    // and a rival awing a town away from another rival is not your achievement.
+    if (e?.how === 'awe' && e.by === 0) stats.townsAwed++;
+  });
 
   ev.on('raid-declared', (e) => {
     if (e?.to?.isPlayer) stats.raidsOnYou++;
@@ -196,6 +212,20 @@ export function initAchievements(state) {
     // `isPlayer` is the only test needed: town.capture sets it on a town you
     // take, so a conquered settlement's houses count as yours from that moment
     // without this having to know anything about conquest.
+    // The most anyone has ever been impressed by you, and how many shrines are
+    // doing the impressing. Polled rather than evented because both are levels:
+    // awe rises and falls continuously, and a shrine can be destroyed.
+    let shrines = 0;
+    for (const t of state.town?.towns || []) {
+      if (!t.isPlayer) {
+        stats.peakAwe = Math.max(stats.peakAwe, Math.round((t.impressedBy?.[0] ?? 0) * 100));
+      }
+    }
+    for (const b of state.town?.allBuildings || []) {
+      if (b.def?.shrine && b.town?.isPlayer) shrines++;
+    }
+    stats.shrinesStanding = shrines;
+
     let standing = 0;
     const kinds = new Set();
     for (const b of state.town?.allBuildings || []) {

@@ -79,6 +79,24 @@ const CSS = `
 #hud .radial text.cost { font-size: 10px; fill: #ffd79a; opacity: 0.85; }
 #hud .radial text.poorcost { fill: #ff9d8a; }
 #hud .radial .hubtext { font-size: 11px; fill: rgba(255,255,255,0.5); }
+/* The description plate under the ring. Centred on its own anchor point, so it
+   can be positioned with one coordinate and grow in either direction. */
+#hud .radial .tip {
+  position: absolute; transform: translateX(-50%);
+  width: 340px; max-width: 80vw; text-align: center; pointer-events: none;
+  font: 11px/1.45 ui-sans-serif, system-ui, sans-serif;
+  background: rgba(12,16,24,0.9); border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 8px; padding: 9px 13px;
+  /* A plate that appears and disappears would make the ring jump as the cursor
+     crosses it; it is always there and only its words change. */
+  min-height: 34px;
+}
+#hud .radial .tip b {
+  display: block; color: #ffe9b8; font-weight: 600; font-size: 11.5px;
+  letter-spacing: 0.06em; margin-bottom: 2px;
+}
+#hud .radial .tip span { color: #efe9dd; opacity: 0.72; }
+#hud .radial .tip .idle { opacity: 0.35; font-style: italic; }
 
 /* --- creature mind panel --- */
 #hud .mind {
@@ -760,8 +778,17 @@ export function initUi(state) {
   function buildRadial(cx, cy) {
     const keys = Object.keys(BUILDINGS);
     const n = keys.length;
+    // SIZED FOR THE NUMBER OF BUILDINGS, not fixed.
+    //
+    // At nine wedges 52/128 fitted. The shrine made it ten, each wedge dropped
+    // to 36 degrees, and at the label radius that is about 56px of arc against
+    // a cost line like "45 wood 22 ore" that wants 75 - so the costs of
+    // neighbouring wedges overlapped and read as "45 wood 22 ore20 wood".
+    //
+    // The ring grows with the list rather than being re-tuned by hand each time
+    // a building is added, which is the mistake this is fixing.
     const rIn = 52;
-    const rOut = 128;
+    const rOut = Math.max(128, Math.round(52 + n * 10.5));
     const size = (rOut + 60) * 2;
 
     let svg = `<svg width="${size}" height="${size}" style="left:${cx - size / 2}px;top:${cy - size / 2}px">`;
@@ -780,7 +807,10 @@ export function initUi(state) {
       const am = (a0 + a1) / 2;
       const lx = O + Math.cos(am) * (rIn + rOut) / 2;
       const ly = O + Math.sin(am) * (rIn + rOut) / 2;
-      const cost = Object.entries(def.cost).map(([r, v]) => `${v} ${r}`).join('  ');
+      // Abbreviated: "45w 22o". The full words are what pushed two costs into
+      // each other, and nobody reading a build menu needs "wood" spelled out
+      // next to a number of wood.
+      const cost = Object.entries(def.cost).map(([r, v]) => `${v}${r[0]}`).join('  ');
 
       svg += `<path class="wedge${affordable ? '' : ' poor'}" data-key="${key}" d="${d}"></path>`;
       svg += `<text x="${lx.toFixed(1)}" y="${(ly - 2).toFixed(1)}">${def.label}</text>`;
@@ -788,9 +818,37 @@ export function initUi(state) {
     });
 
     svg += `<text class="hubtext" x="${O}" y="${O + 4}">esc</text></svg>`;
+
+    // WHAT THE THING ACTUALLY DOES, under the ring.
+    //
+    // Ten buildings now, and four of them (camp, mine, workshop, shrine) do
+    // something invisible that depends on WHERE you put them - a lumber camp in
+    // the square is worthless and a shrine in the middle of your own land
+    // reaches nobody. A label and a price cannot say any of that, so the menu
+    // has to, at the moment the player is choosing.
+    //
+    // Under the ring rather than in the hub: the hub is 52px across and these
+    // are sentences.
+    svg += `<div class="tip" id="build-tip"></div>`;
     elRadial.innerHTML = svg;
 
+    const tip = elRadial.querySelector('#build-tip');
+    tip.style.left = `${cx}px`;
+    tip.style.top = `${cy + rOut + 26}px`;
+    const idle = 'Hover a building to read what it does.';
+    const showTip = (key) => {
+      const def = key && BUILDINGS[key];
+      tip.innerHTML = def
+        ? `<b>${def.label}</b><span>${def.blurb ?? ''}</span>`
+        : `<span class="idle">${idle}</span>`;
+    };
+    showTip(null);
+
     elRadial.querySelectorAll('.wedge').forEach((el) => {
+      // pointerenter, not mouseover: the wedges are SVG paths sharing one
+      // element tree, and mouseover from a child would re-fire on every pixel.
+      el.addEventListener('pointerenter', () => showTip(el.getAttribute('data-key')));
+      el.addEventListener('pointerleave', () => showTip(null));
       el.addEventListener('pointerdown', (e) => {
         e.stopPropagation();
         e.preventDefault();

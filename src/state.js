@@ -1636,6 +1636,62 @@ export const TOWN = {
    */
   IMPRESS_GRACE: 45,
 
+  /**
+   * HOW FAR A SHRINE CARRIES, shrine to the rival town's CENTRE.
+   *
+   * Measured on a real five-civilisation island rather than guessed:
+   *
+   *   territory radius        ~62      (so you may build 62 out from home)
+   *   nearest rival capital    174
+   *   then                     205, 283, 312
+   *
+   * At 150 a shrine pushed out to your own border - 62 from your centre - sits
+   * 112 from the nearest rival and 143 from the second, and reaches both. The
+   * third at 283 needs a shrine 133 out, which is beyond your land, so it stays
+   * out of reach until you have taken somewhere closer to it.
+   *
+   * That progression is the design, not a side effect: awe spreads along the
+   * map town by town, and a god who wants to court the far side of the island
+   * has to get closer to it first. It also means a shrine dropped in the middle
+   * of your own square reaches nobody, which is what makes WHERE you put it the
+   * decision.
+   *
+   * Influence grows over a match, so the same shrine reaches further later.
+   */
+  SHRINE_REACH: 150,
+
+  /**
+   * Awe per second, per shrine, to every rival town in reach.
+   *
+   * 0.0018 converts a town from nothing in about nine minutes - slower than
+   * three minutes of dancing, and it costs you no attention at all. That is the
+   * trade: the creature is the fast route and the expensive one, the shrine is
+   * the patient route you can leave running.
+   *
+   * It beats IMPRESS_DECAY without a fight, because any positive award resets
+   * `impressedAt` and IMPRESS_GRACE holds the decay off while a god is still
+   * working on a town. A shrine in reach IS still working on them, so the rate
+   * only has to be chosen for pacing.
+   *
+   * FLAT INSIDE THE REACH, with no falloff. A gradient would make the edge of
+   * the radius mushy and the placement unreadable; the levers are where you put
+   * it and how many you build, and both of those stay legible this way.
+   */
+  SHRINE_AWE: 0.0018,
+
+  /**
+   * The most awe per second any ONE town can be under, from all shrines at once.
+   *
+   * Without a ceiling the building is degenerate: wood and ore keep
+   * accumulating in a quiet game, and twenty shrines would convert an entire
+   * civilisation in half a minute for no decision beyond "build more shrines".
+   * At 0.0055 the third shrine is the last one that helps, which puts the
+   * fastest possible awe conversion near three minutes - deliberately no faster
+   * than the creature can do it by hand, so the patient route never becomes the
+   * strictly better one.
+   */
+  SHRINE_AWE_CAP: 0.0055,
+
   /** Footprint of the castle at the town centre, corner to corner. */
   /**
    * Everything on this island got about a third larger this phase, the keep
@@ -1892,7 +1948,8 @@ export const TOWN = {
 export const BUILDINGS = {
   house: {
     label: 'House', key: 'house', color: 0xd8c9a8, mercy: 1.0,
-    cost: { wood: 20 }, housing: 4, pad: 5.4, maxSlope: 0.26
+    cost: { wood: 20 }, housing: 4, pad: 5.4, maxSlope: 0.26,
+    blurb: 'Four beds. Population is what prays, and prayer is what pays.'
   },
   /**
    * The MANOR. Eight beds instead of four.
@@ -1910,11 +1967,13 @@ export const BUILDINGS = {
    */
   manor: {
     label: 'Manor', key: 'manor', color: 0xcbb894, mercy: 1.0,
-    cost: { wood: 58, ore: 18 }, housing: 8, pad: 8.6, maxSlope: 0.19
+    cost: { wood: 58, ore: 18 }, housing: 8, pad: 8.6, maxSlope: 0.19,
+    blurb: 'Eight beds in the footprint of two houses. Wants flat ground.'
   },
   farm: {
     label: 'Farm', key: 'farm', color: 0xc8b45e, mercy: 1.0,
-    cost: { wood: 12 }, farm: true, workSlots: 3, pad: 8.8, maxSlope: 0.22
+    cost: { wood: 12 }, farm: true, workSlots: 3, pad: 8.8, maxSlope: 0.22,
+    blurb: 'Cheap food, but it needs three farmers standing in it. Rain helps.'
   },
   /**
    * The CATTLE FARM. Food that needs no farmer.
@@ -1928,7 +1987,8 @@ export const BUILDINGS = {
    */
   cattle: {
     label: 'Cattle Farm', key: 'cattle', color: 0x9db06a, mercy: 1.0,
-    cost: { wood: 34, ore: 8 }, cattle: true, pad: 10.8, maxSlope: 0.16
+    cost: { wood: 34, ore: 8 }, cattle: true, pad: 10.8, maxSlope: 0.16,
+    blurb: 'Less food than a field, but it needs nobody. It feeds you through a raid.'
   },
   /**
    * The LUMBER CAMP. It cuts nothing. It makes the people who cut faster.
@@ -1943,7 +2003,8 @@ export const BUILDINGS = {
    */
   lumber: {
     label: 'Lumber Camp', key: 'lumber', color: 0x8a7048, mercy: 0.5,
-    cost: { wood: 30, ore: 12 }, lumber: true, pad: 7.3, maxSlope: 0.26
+    cost: { wood: 30, ore: 12 }, lumber: true, pad: 7.3, maxSlope: 0.26,
+    blurb: 'Every woodcutter near it swings faster. Build it in the trees, not the square.'
   },
   /**
    * The MINE. +50% to working stone, within MINE_RADIUS.
@@ -1958,21 +2019,57 @@ export const BUILDINGS = {
    */
   mine: {
     label: 'Mine', key: 'mine', color: 0x8e8a86, mercy: 0.5,
-    cost: { wood: 42, ore: 12 }, mine: true, pad: 7.3, maxSlope: 0.34
+    cost: { wood: 42, ore: 12 }, mine: true, pad: 7.3, maxSlope: 0.34,
+    blurb: 'Half again as much ore from the rocks around it. Put it on the rocks.'
   },
   storage: {
     label: 'Storage Pit', key: 'storage', color: 0xa9926c, mercy: 0.5,
-    cost: { wood: 15 }, storage: true, pad: 5.4, maxSlope: 0.24
+    cost: { wood: 15 }, storage: true, pad: 5.4, maxSlope: 0.24,
+    blurb: 'Somewhere to put it down. Carriers walk to the nearest one, so spread them out.'
   },
   workshop: {
     label: 'Workshop', key: 'workshop', color: 0xb08d63, mercy: 0.5,
-    cost: { wood: 30, ore: 15 }, workshop: true, pad: 6.2, maxSlope: 0.24
+    cost: { wood: 30, ore: 15 }, workshop: true, pad: 6.2, maxSlope: 0.24,
+    blurb: 'The tallest roof in the village. Rivals who can see it are impressed by it.'
   },
   barracks: {
     label: 'Barracks', key: 'barracks', color: 0x9a6b52, mercy: 0.0,
     // Pad up from 5.0 with the building: the old one was sized for a one-bay
     // tower, and this is a two-bay hall with a watchtower over it.
-    cost: { wood: 40, ore: 25 }, barracks: true, pad: 9.5, maxSlope: 0.24
+    cost: { wood: 40, ore: 25 }, barracks: true, pad: 9.5, maxSlope: 0.24,
+    blurb: 'Soldiers, and siege engines to break a wall. No mercy in it at all.'
+  },
+
+  /**
+   * THE SHRINE. The awe route, built out of stone instead of performed.
+   *
+   * WHAT IT FIXES. Awe had three sources and every one of them wanted your
+   * hands on the game: a miracle you cast, a creature you walk into somebody
+   * else's streets and keep awake, and IMPRESS_PER_BUILDING - which, measured,
+   * is very nearly unreachable. `townsWatching` counts a rival as watching
+   * within their influence radius plus IMPRESS_SIGHT_MARGIN, about 107 from
+   * their centre, and you may only build inside your OWN radius of about 63,
+   * with the nearest rival capital 174 away. The closest a new building of
+   * yours can get to being seen is 114. So in an ordinary game finishing a
+   * workshop impressed nobody, and a player who was not actively courting
+   * could not move the meter at all - which is exactly what was reported.
+   *
+   * A shrine is the structural answer: you put it down once, near the border
+   * you care about, and it works while you do something else. It is the only
+   * building in the game whose entire output is awe.
+   *
+   * WHY IT HAS ITS OWN REACH. It deliberately does NOT use `townsWatching`.
+   * That number is about a rival happening to catch sight of your day-to-day
+   * building; a shrine is a monument raised AT somebody, and the whole point is
+   * that it carries further than a barn does. See TOWN.SHRINE_REACH for how 150
+   * was measured against real town spacing.
+   */
+  shrine: {
+    label: 'Shrine', key: 'shrine', color: 0xc9a6ff, mercy: 1.6,
+    cost: { wood: 45, ore: 22 }, shrine: true, pad: 7.0, maxSlope: 0.20,
+    /** Finishing one is itself a wonder - see the grandeur note in town.js. */
+    grandeur: 3,
+    blurb: 'Awes every rival town within reach, second by second, while you do nothing. Build it toward their border.'
   }
 };
 
@@ -3874,6 +3971,25 @@ export const ACHIEVEMENTS = [
     blurb: 'Have a raid declared against you.', stat: 'raidsOnYou', need: 1 },
   { id: 'stonewall', group: 'War', name: 'Stonewall',
     blurb: 'Weather ten declared raids.', stat: 'raidsOnYou', need: 10 },
+
+  // --- awe: the other way to take a town ----------------------------------
+  //
+  // Its own group because it is its own way to win, and because the War group
+  // above rewards the exact opposite behaviour. A player reading the list
+  // should be able to see that there are two routes through this game.
+  { id: 'first-shrine', group: 'Awe', name: 'Cornerstone',
+    blurb: 'Raise your first shrine.', stat: 'shrinesStanding', need: 1 },
+  { id: 'shrine-road', group: 'Awe', name: 'Pilgrim Road',
+    blurb: 'Three shrines standing at once.', stat: 'shrinesStanding', need: 3 },
+  { id: 'noticed', group: 'Awe', name: 'Noticed',
+    blurb: 'Get a rival town a quarter of the way to your side.',
+    stat: 'peakAwe', need: 25 },
+  { id: 'half-won', group: 'Awe', name: 'Wavering',
+    blurb: 'Get a rival town halfway to your side.', stat: 'peakAwe', need: 50 },
+  { id: 'first-convert', group: 'Awe', name: 'Conversion',
+    blurb: 'Win a town without a fight.', stat: 'townsAwed', need: 1 },
+  { id: 'bloodless', group: 'Awe', name: 'Bloodless',
+    blurb: 'Win three towns without a fight.', stat: 'townsAwed', need: 3 },
 
   // --- divinity -----------------------------------------------------------
   { id: 'airborne', group: 'Divinity', name: 'Airborne',

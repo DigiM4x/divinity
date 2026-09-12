@@ -1201,3 +1201,124 @@ Both routes alive, neither dominant, 0.139 ms/tick, reckoning validates.
 The island panel says which step a siege is on - *"14 buildings standing, then
 the keep"* - rather than leaving the player to wonder why the wall bar will not
 move yet.
+
+---
+
+## Shrines, and an awe route you can leave running
+
+**Reported:** *"No matter how idle I play I can't awe the other players, need to
+build a system to +awe the other +players."*
+
+That is not a tuning complaint, it is a structural one, and measuring the three
+existing awe sources showed the reporter was right:
+
+| source | what it needs |
+|---|---|
+| `IMPRESS_PER_MIRACLE` 0.16 | a miracle, cast by hand, in their sight |
+| `IMPRESS_PER_DANCE` 0.030 | a creature walked into their streets and kept awake |
+| `IMPRESS_PER_BUILDING` 0.05 | a building they can see - and they nearly never can |
+
+The third one is the interesting failure. `townsWatching` counts a rival as
+watching within their influence radius plus `IMPRESS_SIGHT_MARGIN`, about **107**
+from their centre. You may only build inside your own radius, about **63**. The
+nearest rival capital, measured on a real five-civilisation island, is **174**
+away. So the closest a new building of yours can possibly get to being seen is
+**114** - outside the window, always. Finishing a workshop impressed nobody, and
+a player who was not actively courting could not move the meter at all.
+
+So awe had no passive source whatsoever. Hence the shrine.
+
+### The shrine
+
+One building whose entire output is awe: `TOWN.SHRINE_AWE` 0.0018/s to every
+rival town within `TOWN.SHRINE_REACH` of it, whether anyone is watching the
+screen or not.
+
+**Its reach is its own, and that is deliberate.** It does not use
+`townsWatching`, because that number is about a rival catching sight of your
+day-to-day building; a shrine is a monument raised *at* somebody. 150 was sized
+against the measured spacing: a shrine pushed out to your own border sits 112
+from the nearest rival capital and 143 from the second, and reaches both. The
+third, at 283, needs a shrine 133 out - beyond your land - so it stays out of
+reach until you hold somewhere closer. Awe now spreads across the map town by
+town, and a shrine dropped in the middle of your own square reaches nobody,
+which is what makes *where* the decision.
+
+**Rate chosen for pacing, not against the decay.** Any positive award stamps
+`impressedAt`, and `IMPRESS_GRACE` holds the decay off while a god is still
+working on a town - a shrine in reach *is* still working on them. So 0.0018
+means what it says: nine minutes from nothing to a conversion, against three
+minutes of dancing. That is the trade - the creature is the fast, expensive
+route, the shrine is the patient one you can walk away from.
+
+**Capped at `SHRINE_AWE_CAP` 0.0055.** Without a ceiling the building is
+degenerate: wood and ore pile up in a quiet game and twenty shrines would take a
+civilisation in half a minute for no decision beyond "build more shrines". Three
+is where it stops paying, which puts the floor near three minutes - deliberately
+no faster than a creature can manage by hand, so the patient route never becomes
+the strictly better one.
+
+Measured, by removing shrines one at a time rather than adding them (the count
+only ever falls, so a failed placement cannot gazump the reading):
+
+| shrines in reach | awe/s measured | expected |
+|---|---|---|
+| 1 | 0.00180 | 0.00180 |
+| 2 | 0.00360 | 0.00360 |
+| 3 | 0.00540 | 0.00540 |
+
+And end to end: one shrine on the border, no other input at all, awe climbed
+0 -> 0.108 -> 0.216 over two minutes, projecting 9.3 minutes; run on, Kelvedon
+came over with `how: 'awe'` and five of the six new achievements fired.
+
+**Rivals build them too.** `wantedBuilding` wants a shrine once a town has a
+workshop and more than ten people, behind the first barracks - a god that cannot
+defend itself has no business courting the neighbours - capped at two, which is
+where the cap stops paying anyway. A soak found Ashfell with two, Duncove with
+two and Marrow with one, and rival gods awing the player's own town to 12% and
+15% while the player did nothing. A passive engine only the player could build
+would have been this project's recurring fairness bug, pointed the usual way.
+
+They also needed *aiming*: `placeSomewhere` picks a random bearing, which for a
+shrine means a 45-wood monument pointing at open sea. `placeToward` walks the
+radius from the edge inward on the bearing to the nearest foreign town, because
+the outermost legal spot on the right bearing reaches furthest.
+
+### Two mistakes the screenshot caught, and one it did not
+
+The shrine was first built on `fountain-round`. That piece is **2.00 across** -
+two whole cells, the same trap the cattle trough fell into - so the "altar" was
+twice as wide as the building standing on it. Halving it fixed the width and not
+the real problem, which no measurement could have shown: the piece has its own
+central **spout**, so the finished shrine had a fat cream column standing between
+its pillars and read as a barrel under a bandstand. *No amount of scaling fixes
+a piece that is the wrong shape.* `road` is flat, which is what a floor wants to
+be, and `wall-block-half` at 0.42 makes the altar stone.
+
+`banner-green` went the same way: it hangs from y=0.16 with its geometry on the
++X face, because it is a cloth meant to be pinned to a wall - and this building
+has no walls, so on its own it floated. A second `roof-point` at 0.4 makes the
+finial out of a piece that is already spire-shaped.
+
+### The build menu says what things do
+
+Ten buildings now, and four of them (camp, mine, workshop, shrine) do something
+invisible that depends on where you put them - a lumber camp in the square is
+worthless and a shrine in your own heartland reaches nobody. A label and a price
+cannot say that, so every building got a `blurb` and the radial got a plate
+under the ring that shows it on hover.
+
+Adding the tenth wedge also broke the ring: each wedge dropped to 36 degrees,
+which at the label radius is about 56px of arc against a cost line like
+`45 wood 22 ore` that wants 75 - so neighbouring costs overlapped into
+`45 wood 22 ore20 wood`. The radius is now derived from the building count
+rather than being a hand-tuned constant, and costs abbreviate to `45w 22o`.
+Nobody reading a build menu needs "wood" spelled out next to a number of wood.
+
+### A note on fragility
+
+A fifteen-minute hands-off soak ended with the player's border shrine **razed**
+in a raid. That is not a bug - a shrine is a building on your frontier and
+raiders destroy buildings - but it is a real tension worth keeping: the patient
+route is also the exposed one, and a shrine pushed close enough to matter is
+close enough to lose.

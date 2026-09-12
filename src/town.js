@@ -213,6 +213,53 @@ function makeBarracksGeo(P) {
   return composeParts(parts);
 }
 
+/**
+ * THE SHRINE: an altar stone on flagstones, under a canopy on four pillars.
+ *
+ * Every piece MEASURED before it was placed, because this kit does not use the
+ * units you would assume:
+ *
+ *   road             1.00 across and 0.03 tall - a flagstone, centred
+ *   wall-block-half  1.00 across, 0.50 tall, centred, sits on y = 0
+ *   pillar-stone     0.16 across, 1.00 tall, centred
+ *   roof-point       1.10 across, 0.50 tall, centred
+ *
+ * IT WAS BUILT ON A FOUNTAIN FIRST and that was wrong twice over. `fountain-
+ * round` is 2.00 across - two whole cells, the same trap the cattle trough
+ * fell into - and halving it fixed the width but not the real problem, which
+ * only a screenshot showed: the piece has its own central SPOUT, so the
+ * finished shrine had a fat cream column standing between its pillars and read
+ * as a barrel under a bandstand. No amount of scaling fixes a piece that is
+ * the wrong shape; `road` is flat, which is what a floor wants to be.
+ *
+ * The banner went the same way. `banner-green` hangs from y = 0.16 with its
+ * geometry on the +X face (bbox centre x = 0.40) - it is a cloth meant to be
+ * pinned to a wall, and this building has no walls, so on its own it floated.
+ * A small second roof-point makes the finial instead, out of a piece that is
+ * already the right shape for a spire.
+ *
+ * A canopy rather than walls, on purpose. Every other building in the village
+ * is a box with a roof; the one structure that exists to be LOOKED AT from a
+ * rival's land should be open, so there is something to see inside it.
+ */
+function makeShrineGeo(P) {
+  const parts = [];
+  // Flagstones, then the altar stone in the middle of them.
+  parts.push({ geo: P.get('road'), y: 0 });
+  parts.push({ geo: P.get('wall-block-half'), y: 0.03, scale: 0.42 });
+  // Four pillars, inset so the canopy overhangs them.
+  for (const x of [-0.34, 0.34]) {
+    for (const z of [-0.34, 0.34]) {
+      parts.push({ geo: P.get('pillar-stone'), x, y: 0.03, z });
+    }
+  }
+  // Canopy on the pillar tops: 0.03 of flagstone plus 1.00 of pillar.
+  parts.push({ geo: P.get('roof-point'), y: 1.03 });
+  // ...and a spire on the canopy's own apex.
+  parts.push({ geo: P.get('roof-point'), y: 1.53, scale: 0.4 });
+  return composeParts(parts);
+}
+
 function makeStorageGeo(P) {
   // Kept tight. Spread these out and the whole thing reads as debris someone
   // dropped rather than as one storage pit.
@@ -565,7 +612,10 @@ export function initTown(state) {
     mine: fit(makeMineGeo(P), 8.1),
     storage: fit(makeStorageGeo(P), 6.8),
     workshop: fit(makeWorkshopGeo(P, false), 8.1),
-    barracks: fit(makeBarracksGeo(P), 11.9)
+    barracks: fit(makeBarracksGeo(P), 11.9),
+    // Between a house and a workshop: a monument, but not one that out-tops the
+    // building the village actually works in.
+    shrine: fit(makeShrineGeo(P), 7.6)
   };
   // The paddock and its herd, fitted through one transform so the animals stand
   // where the pen puts them. Done after the table because both halves have to
@@ -1065,7 +1115,10 @@ export function initTown(state) {
     });
     // Rivals within sight of a new player building take note of it.
     if (town.isPlayer) {
-      const grandeur = def.workshop ? 2 : def.housing ? 1 : 0.6;
+      // A building may state its own grandeur; the guesses are the fallback for
+      // the nine that do not. The shrine declares 3 - raising one is a wonder,
+      // which is a different claim from the drip it goes on to produce.
+      const grandeur = def.grandeur ?? (def.workshop ? 2 : def.housing ? 1 : 0.6);
       for (const t of townsWatching(x, z)) {
         addImpressiveness(t, TOWN.IMPRESS_PER_BUILDING * grandeur, 'building');
       }
@@ -1377,6 +1430,17 @@ export function initTown(state) {
     // its own tier's garrison, so without this an army is capped below the
     // strength it needs to march anywhere.
     if (may('barracks') && pop > 16 && count('barracks') < 2) return 'barracks';
+    // A SHRINE, once the town is a going concern.
+    //
+    // Rivals get the awe route for the same reason they got creatures and the
+    // blessing: a passive engine that only the player could build would be the
+    // fairness bug this project keeps finding, and awe is a way to WIN. Behind
+    // the first barracks on purpose - a god that cannot defend itself has no
+    // business courting the neighbours - and capped at two, which is where
+    // TOWN.SHRINE_AWE_CAP stops paying anyway.
+    if (may('shrine') && pop > 10 && count('workshop') > 0 && count('shrine') < 2) {
+      return 'shrine';
+    }
     // A big town puts up manors rather than another row of huts: it is the
     // cheaper way to house a crowd once you have the ore.
     if (may('manor') && pop > 14 && canAfford(town, BUILDINGS.manor)) return 'manor';
@@ -1388,6 +1452,42 @@ export function initTown(state) {
     // piled up with nothing to do with it.
     if (!idleFallback) return null;
     return may('house') ? 'house' : null;
+  }
+
+  /**
+   * Put a building as far toward `target` as this town's land allows.
+   *
+   * A shrine's whole value is WHERE it stands - see TOWN.SHRINE_REACH - and
+   * `placeSomewhere` picks a random bearing, which for a shrine means a rival
+   * would usually raise a 45-wood monument pointing at open sea. This walks the
+   * radius from the edge inward, because the outermost legal spot on the right
+   * bearing is the one that reaches furthest, and fans out a little at each
+   * distance so a blocked bearing does not waste the attempt.
+   */
+  function placeToward(town, def, target, opts) {
+    const bx = target.centre.x - town.centre.x;
+    const bz = target.centre.z - town.centre.z;
+    const base = Math.atan2(bz, bx);
+    for (let r = town.influenceRadius - 2; r > TOWN.CENTRE_CLEARANCE + 2; r -= 3) {
+      for (const spread of [0, 0.22, -0.22, 0.45, -0.45, 0.7, -0.7]) {
+        const a = base + spread;
+        const x = town.centre.x + Math.cos(a) * r;
+        const z = town.centre.z + Math.sin(a) * r;
+        if (place(town, def, x, z, opts).ok) return true;
+      }
+    }
+    return false;
+  }
+
+  /** The foreign town this one would most like to be seen from. */
+  function nearestForeign(town) {
+    let best = null, bd = Infinity;
+    for (const t of towns) {
+      if (t.owner === town.owner) continue;
+      const d = Math.hypot(t.centre.x - town.centre.x, t.centre.z - town.centre.z);
+      if (d < bd) { bd = d; best = t; }
+    }
+    return best;
   }
 
   /** Try hard to find somewhere legal in the town's own land, then give up. */
@@ -1419,6 +1519,9 @@ export function initTown(state) {
     const want = wantedBuilding(town, null);
     const def = want && BUILDINGS[want];
     if (!def || !canAfford(town, def)) return;
+    // A shrine is aimed at somebody; everything else can go anywhere at home.
+    const at = def.shrine ? nearestForeign(town) : null;
+    if (at && placeToward(town, def, at)) return;
     placeSomewhere(town, def);
   }
 
@@ -1476,6 +1579,46 @@ export function initTown(state) {
    * because every existing caller is the player. A town cannot be impressed by
    * the god it already answers to.
    */
+  /**
+   * EVERY SHRINE THAT CAN SEE THIS TOWN, once a second.
+   *
+   * Runs per TOWN being courted rather than per shrine, which is the cheaper
+   * way round - one pass over `allBuildings` for each town, instead of a pass
+   * over every town for each shrine - and it is also the only way to apply
+   * TOWN.SHRINE_AWE_CAP honestly, since the cap is a property of the town's
+   * total exposure and not of any one building.
+   *
+   * ONE AWARD PER SUITOR, not one per shrine. Three of a god's shrines in reach
+   * are a single stronger award, so `impressedAt` is stamped once and the
+   * awe-changed toast does not fire three times a second.
+   *
+   * A SHRINE NEVER COURTS ITS OWN TOWN, and never one its god already holds -
+   * there is nothing to win there, and awe of your own people is not a thing
+   * this game models.
+   */
+  const SHRINE_PERIOD = 1;
+  function shrineTick(town, dt) {
+    town._shrineTimer = (town._shrineTimer ?? Math.random()) - dt;
+    if (town._shrineTimer > 0) return;
+    town._shrineTimer += SHRINE_PERIOD;
+
+    // Awe per second, gathered by whose shrine it is.
+    let rates = null;
+    for (const b of allBuildings) {
+      if (!b.def.shrine) continue;
+      const owner = b.town?.owner;
+      if (owner == null || owner === town.owner) continue;
+      if (Math.hypot(b.pos.x - town.centre.x, b.pos.z - town.centre.z) > TOWN.SHRINE_REACH) continue;
+      rates ??= new Map();
+      rates.set(owner, (rates.get(owner) ?? 0) + TOWN.SHRINE_AWE);
+    }
+    if (!rates) return;
+
+    for (const [by, rate] of rates) {
+      addImpressiveness(town, Math.min(rate, TOWN.SHRINE_AWE_CAP) * SHRINE_PERIOD, 'shrine', by);
+    }
+  }
+
   function addImpressiveness(town, amount, why, by = 0) {
     if (town.owner === by) return;
     const before = town.impressedBy[by] ?? 0;
@@ -1888,6 +2031,15 @@ export function initTown(state) {
       // TOWN.IMPRESS_GRACE: the decay is 24 points a minute against 3 points a
       // dance, so running it during a performance meant the meter fought the
       // hand that was filling it and the peaceful route could not be finished.
+      // SHRINES, before the decay rather than after it.
+      //
+      // A shrine awards awe, which sets `impressedAt`, which is what the grace
+      // below reads. Run the other way round the decay would look at a stale
+      // timestamp and shave a point off the very town a shrine had just
+      // impressed - the meter would climb and fall in the same tick and the
+      // building would look half-broken at a glance.
+      shrineTick(town, dt);
+
       for (let i = 0; i < town.impressedBy.length; i++) {
         if (i === town.owner || town.impressedBy[i] <= 0) continue;
         const last = town.impressedAt?.[i] ?? -Infinity;

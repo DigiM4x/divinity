@@ -291,6 +291,10 @@ async function boot() {
     'wall-doorway-round', 'roof-flat',
     // Barracks hall: windows on both storeys and the watchtower.
     'roof-high-point',
+    // THE SHRINE. A stone dais, four pillars, a canopy and a banner - the only
+    // building in the kit that had to be assembled out of pieces nothing else
+    // uses, because nothing else in a village is a monument.
+    'pillar-stone', 'road', 'wall-block-half', 'banner-green',
     // Street furniture for the town squares - see SCENERY.SQUARE.
     ...SCENERY.SQUARE.TOWN.map((p) => p.name)
   ]);
