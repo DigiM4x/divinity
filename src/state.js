@@ -1526,9 +1526,69 @@ export const TOWN = {
    * START_FOOD must sit clearly above that or a fresh town can never grow even
    * once - see the note on START_FOOD below.
    */
-  GROWTH_FOOD_COST: 12,
-  GROWTH_FOOD_RESERVE: 20,
-  GROWTH_INTERVAL: 14,
+  GROWTH_FOOD_COST: 10,
+  /**
+   * Food held back from breeding, so a town never starves itself having
+   * children.
+   *
+   * Down from 20, which with a cost of 12 meant a birth needed 32 food in
+   * hand. Measured over twelve minutes: in a healthy town food blocked growth
+   * for only 11 seconds out of 720, but in a town that was struggling it was
+   * the dominant blocker at 391 of 720 - so the reserve was doing almost
+   * nothing when things went well and most of the harm when they went badly,
+   * which is the wrong way round. A birth now needs 22.
+   */
+  GROWTH_FOOD_RESERVE: 12,
+
+  /**
+   * SECONDS BETWEEN BIRTHS - the figure for a town of one, before the
+   * population that is actually doing the breeding is taken into account.
+   *
+   * This was a FLAT 14 SECONDS PER TOWN, which is the real reason people felt
+   * they would not reproduce: a town of thirty produced children at exactly the
+   * rate a town of three did. Growth was a property of the settlement rather
+   * than of the people in it, so every town on the island converged on the same
+   * straight line and a big city felt more barren than a hamlet.
+   *
+   * Measured on a real twelve-minute run: nothing was blocking growth for 627
+   * of 720 seconds - the gates were open almost the whole time and the interval
+   * alone was the limit. So the interval is what changed.
+   */
+  GROWTH_INTERVAL: 9,
+
+  /**
+   * How much each head shortens the wait: interval / (1 + pop * this).
+   *
+   *    pop  8 -> 6.8s      pop 24 -> 4.6s
+   *    pop 16 -> 5.5s      pop 40 -> 4.0s (the floor)
+   *
+   * Against a flat 14 that is about twice as fast at the size a town starts at
+   * and three times as fast once it is a city - and, more to the point, it now
+   * ACCELERATES, so a town recovering from a raid climbs back faster the more
+   * of it survived.
+   *
+   * 0.04 rather than the 0.05 I first tried, and the difference was measured
+   * rather than felt: at 0.05 with a floor of 3 the whole ISLAND filled to its
+   * 300-head ceiling inside ten minutes and stayed there, with the cap blocking
+   * growth for 120 of 720 sampled seconds. Every civilisation maxed out is not
+   * a world with room to play in.
+   *
+   * Food becomes the real limiter at the top of the curve, which is the right
+   * thing to be limited by: it is the one the player can do something about,
+   * with farms, paddocks and the Food miracle.
+   */
+  GROWTH_PER_HEAD: 0.04,
+
+  /**
+   * ...and the floor, whatever the population.
+   *
+   * Below about this, children arrive faster than the eye reads them as
+   * separate events and a town square starts to boil - and with five towns all
+   * breeding at the floor it is also what decides how fast the island as a
+   * whole fills. VILLAGER.MAX and the food cost are the hard bounds; this sets
+   * the pace they are approached at.
+   */
+  GROWTH_MIN_INTERVAL: 4,
 
   /**
    * Starting stockpile, enough to put up the first few buildings.

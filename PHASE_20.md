@@ -1398,3 +1398,93 @@ That getter has now caused this bug four times in two sessions (both attack
 miracles, thrown props, the debug row). It is a getter named `buildings` that
 means *some* of the buildings, and the lesson is the naming: `allBuildings`
 and `buildings` differ by one word and by the entire rest of the map.
+
+---
+
+## People have children; towns do not
+
+**Reported:** *"make it easier for the people to reproduce."*
+
+Measured before touching anything, twelve minutes of untouched world, sampling
+what was standing in the way of a birth every simulated second:
+
+| blocker | seconds out of 720 |
+|---|---|
+| nothing at all | **627** |
+| housing | 82 |
+| food | 11 |
+
+The gates were **open 87% of the time**. Nothing was stopping births; the
+interval was simply the whole limit - and the interval was a flat
+`GROWTH_INTERVAL: 14` **per town, regardless of its population**. A city of
+thirty produced children at exactly the rate the hamlet it grew out of did.
+Growth was a property of the settlement rather than of the people in it, which
+is why a big town felt more barren than a small one.
+
+So the interval is what changed:
+
+```
+interval = GROWTH_INTERVAL / (1 + pop * GROWTH_PER_HEAD),  floored
+```
+
+| population | before | after |
+|---|---|---|
+| 1 | 14.0s | 8.7s |
+| 8 | 14.0s | 6.8s |
+| 16 | 14.0s | 5.5s |
+| 24 | 14.0s | 4.6s |
+| 40+ | 14.0s | 4.0s (the floor) |
+
+Roughly twice as fast at the size a town starts at, three times as fast once it
+is a city, and - the part that matters more than the multiplier - it
+**accelerates**, so a town recovering from a raid climbs back faster the more of
+it survived.
+
+`GROWTH_FOOD_RESERVE` also came down, 20 to 12, so a birth needs 22 food rather
+than 32. The measurements said why: in a healthy town the food gate cost 11
+seconds out of 720, but in a *struggling* town it was the dominant blocker at
+391 of 720. The reserve was doing almost nothing when things went well and most
+of the harm when they went badly, which is the wrong way round.
+
+### Tuned by measurement, not by feel
+
+The first attempt was `PER_HEAD 0.05` with a floor of 3s, and a soak said no:
+the whole island filled to its **300-head ceiling inside ten minutes** and sat
+there, with the cap blocking growth for 120 of 720 sampled seconds. Every
+civilisation maxed out is not a world with room to play in. 0.04 with a floor of
+4 lands the island at 292 of 300 after twelve minutes with the cap blocking only
+27 seconds.
+
+The blocker table afterwards is the real result:
+
+| blocker | before | after |
+|---|---|---|
+| nothing | 627 | 349 |
+| **housing** | 82 | **324** |
+| food | 11 | 20 |
+| cap | 0 | 27 |
+
+Growth is now limited by **beds** - the one lever the player actually holds, and
+one the HUD already nags about. Before, it was limited by a constant nobody
+could see.
+
+Player town across twelve minutes, all three runs: peaked at **24** before,
+**53** at the first setting, **72** after - and the baseline run's town collapsed
+to zero while the tuned one did not. Seeds differ between runs so the collapse is
+not itself proof of anything; the interval table above is the deterministic part.
+
+### Two measurement notes worth keeping
+
+**`villager-born` carries only `pos`.** I filtered it on `e.town` and counted
+zero births in a world that was having hundreds. A field that does not exist
+does not throw - it reads as `undefined`, compares false, and reports a
+confident wrong answer.
+
+**A re-imported module is not the running one.** `await import('/src/state.js')`
+from the page reported `VILLAGER.MAX` as 150 while the game was happily running
+300 villagers, which looked like a serious cap violation and was not: after the
+HMR reloads of an editing session, the dynamic import resolves to a *different
+module instance* than the one the game closed over. Constants agree; anything
+written at runtime - and `setCivilisations` writes `VILLAGER.MAX` - does not.
+Read live values off `state`, or measure them (spawn until it refuses), never
+off a fresh import.

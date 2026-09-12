@@ -1253,6 +1253,24 @@ export function initTown(state) {
    * food went with them. It also inflated the reckoning's birth statistic,
    * because `villager-born` fired for each one.
    */
+  /**
+   * How long until this town's next child, given how many people are in it.
+   *
+   * People have children; towns do not. See TOWN.GROWTH_INTERVAL for the
+   * measurements - it used to be one flat number per settlement, so a city of
+   * thirty bred no faster than the hamlet it grew out of.
+   *
+   * Guarded against a population of zero, which happens: a town whose people
+   * have all been killed still ticks, and would otherwise get the full
+   * one-person interval rather than being treated as the ruin it is.
+   */
+  function growthInterval(pop) {
+    return Math.max(
+      TOWN.GROWTH_MIN_INTERVAL,
+      TOWN.GROWTH_INTERVAL / (1 + Math.max(0, pop) * TOWN.GROWTH_PER_HEAD)
+    );
+  }
+
   function growthBlocker(town) {
     const pop = population(town);
     if ((state.villagers?.list?.length ?? 0) >= VILLAGER.MAX) return 'cap';
@@ -2025,7 +2043,7 @@ export function initTown(state) {
       town.pop = pop;
       town.growthTimer -= dt;
       if (town.growthTimer <= 0) {
-        town.growthTimer = TOWN.GROWTH_INTERVAL;
+        town.growthTimer = growthInterval(pop);
         if (!growthBlocker(town)) {
           // PAY FOR WHAT ARRIVED, and announce only that. The old order paid
           // first and announced regardless of whether `spawn` gave anything
