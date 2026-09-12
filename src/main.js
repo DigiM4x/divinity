@@ -33,6 +33,7 @@ import { initSound } from './sound.js';
 import { initGraveyard } from './graveyard.js';
 import { initReckoning } from './reckoning.js';
 import { initReckoningUi } from './reckoningui.js';
+import { initDev } from './dev.js';
 
 import { loadModels } from './lib/models.js';
 
@@ -357,6 +358,8 @@ async function boot() {
   // which is why it cannot run before the towns exist.
   initReckoning(state);
   initReckoningUi(state);
+  // Last, so every system it cheats at already exists. See dev.js.
+  initDev(state);
   // Two casts, four walk frames each: the population animates in ten draw calls
   // no matter how many villagers there are.
   state.villagerPoses = await Promise.all([
@@ -570,6 +573,8 @@ function frame(now) {
   if (state.input.keyPressed('Digit2')) state.creature.setLeash('compassion');
   if (state.input.keyPressed('Digit3')) state.creature.setLeash('aggression');
   if (state.input.keyPressed('Digit4')) state.creature.setLeash('free');
+  // BACKQUOTE opens /dev. The console key, in a game with no console.
+  if (state.input.keyPressed('Backquote')) state.dev?.toggle();
   // V BLESSES. B is build, so the god's other reach-down takes V.
   //
   // The roll is announced rather than merely applied - a random effect the
@@ -592,6 +597,7 @@ function frame(now) {
     else state.ui.toggleBuildMenu();
   }
   if (state.input.keyPressed('Escape')) {
+    state.dev?.close();
     state.prayers.clearSelection();
     state.ui.closeActs();
     state.ui.closeZoo();

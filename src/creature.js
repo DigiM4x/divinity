@@ -2335,6 +2335,29 @@ export function initCreature(state, opts = {}) {
     /** Species matchup. See PET_KIND and NATURES. */
     get nature() { return kind.nature; },
 
+    /**
+     * CHEATS. Used only by the /dev panel - see dev.js.
+     *
+     * They set the INPUTS the sim already derives from (age, meals eaten,
+     * health) rather than writing the derived values, so nothing downstream can
+     * end up disagreeing with itself: `scale` is still computed from age and
+     * food on the next tick exactly as it always was.
+     */
+    devGrow(frac = 1) {
+      age = CREATURE.MATURE_AGE * frac;
+      mealsEaten = CREATURE.FOOD_TO_MATURE * frac;
+    },
+    /** Forget the blessing cooldown, so the panel can roll again at will. */
+    devReadyBless() { blessNext = 0; },
+    devHeal() {
+      health = CREATURE.WAR_HEALTH;
+      routedUntil = -1;
+      withdrawn = false;
+      needs.hunger = 0;
+      needs.energy = 1;
+      needs.cleanliness = 1;
+    },
+
     /** The live blessing: 1 when there is none. See BLESSING. */
     get blessMult() { return blessMult; },
     /** Seconds of blessing left, 0 when none - for the HUD's bar. */

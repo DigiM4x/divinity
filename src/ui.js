@@ -687,6 +687,7 @@ export function initUi(state) {
       <div><b>K</b> achievements &nbsp; <b>R</b> prayers &nbsp; <b>Tab</b> reckoning &nbsp; <b>M</b> mute &nbsp; <b>N</b> new island</div>
       <div><b>B</b> build &nbsp; <b>C</b> creature &nbsp; <b>G</b> mind &nbsp; <b>F</b> debug &nbsp; <b>P</b> pause</div>
       <div><b>V</b> bless your creature &mdash; ${BLESSING.COST} belief, a random ${BLESSING.MIN}-${BLESSING.MAX}x attack</div>
+      <div><b>\`</b> &mdash; the <b>/dev</b> panel, with cheats</div>
     </div>
     <div class="panel buildbar" id="hud-buildbar">
       <div class="hint">Press <b>B</b> to build</div>
