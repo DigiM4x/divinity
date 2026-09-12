@@ -1954,7 +1954,11 @@ export function initUi(state) {
       for (const [k, n] of Object.entries(vs.states)) {
         if (n > 0) html += row(k, n);
       }
-      html += row('buildings', state.town ? state.town.buildings.length : 0);
+      // EVERYTHING YOU HOLD, not just the town you started in - otherwise this
+      // row quietly under-reports the moment you take a second city, which is
+      // exactly when you are most likely to be reading it.
+      html += row('buildings', state.town
+        ? state.town.allBuildings.filter((b) => b.town?.isPlayer).length : 0);
     }
 
     // --- prayers (Phase 16) ---

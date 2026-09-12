@@ -438,7 +438,12 @@ export function initProps(state) {
     }
 
     if (state.town && power > 12) {
-      for (const b of [...state.town.buildings]) {
+      // EVERY town's buildings. `state.town.buildings` is the player's founding
+      // town alone, so a boulder hurled through a rival's roof bounced off it,
+      // and after Phase 20 the same was true of a town you had captured - your
+      // own house, in your own ring, immune to your own hand. Same one-word
+      // fault the two attack miracles had.
+      for (const b of [...state.town.allBuildings]) {
         const pad = b.def.pad * 0.75;
         if ((b.pos.x - p.pos.x) ** 2 + (b.pos.z - p.pos.z) ** 2 < pad * pad) {
           state.town.demolish(b);

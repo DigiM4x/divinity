@@ -1377,6 +1377,43 @@ export function initTown(state) {
     return best;
   }
 
+  /**
+   * THE TOWN OF YOURS THAT WOULD RAISE A BUILDING HERE, or null.
+   *
+   * Any town you HOLD whose ring covers the spot - not the one you happened to
+   * start in. Every placement path used `playerTown`, which meant that taking
+   * a rival's town gave you its land, its people and its books and then would
+   * not let you put a single hut inside the ring you had just won. The people
+   * had joined you; the build menu had not been told.
+   *
+   * Owner-based, like everything else since Phase 20, so it needs no separate
+   * bookkeeping: the moment `capture` writes `owner`, the ring becomes
+   * buildable, and the moment a rival takes it back it stops being.
+   */
+  function myTownAt(x, z) {
+    let best = null;
+    let bestD = Infinity;
+    for (const t of towns) {
+      if (t.owner !== 0) continue;
+      const d = Math.hypot(x - t.centre.x, z - t.centre.z);
+      if (d <= t.influenceRadius && d < bestD) { bestD = d; best = t; }
+    }
+    return best;
+  }
+
+  /**
+   * ...and whose books to quote when the spot belongs to nobody of yours.
+   *
+   * `validate` needs SOME town to answer as, or it cannot say "outside
+   * influence" - and the fallback deliberately is not `playerTown`, which is
+   * only your FOUNDING town and may itself have been taken from you. A god who
+   * has lost their first city and holds two others must still be able to build
+   * in those two.
+   */
+  function myTownFor(x, z) {
+    return myTownAt(x, z) ?? towns.find((t) => t.owner === 0) ?? playerTown;
+  }
+
   // --- rival behaviour ------------------------------------------------------
   /**
    * A rival's whole brain: every so often work out what it is shortest of and
@@ -1829,7 +1866,10 @@ export function initTown(state) {
 
     ghost.visible = true;
     ghostPos.copy(hits[0].point);
-    ghostReason = validate(playerTown, pending, ghostPos.x, ghostPos.z);
+    // Whichever of your towns owns the ground under the cursor, so the preview
+    // turns green inside a captured ring instead of refusing there forever.
+    const host = myTownFor(ghostPos.x, ghostPos.z);
+    ghostReason = validate(host, pending, ghostPos.x, ghostPos.z);
     ghostValid = ghostReason === '';
     // Placing here will move the earth. Not a refusal - the ground gets shaped
     // either way - but the player should see it coming rather than watch a
@@ -1842,7 +1882,7 @@ export function initTown(state) {
     ghost.material.color.set(ghostValid ? 0x6fe08a : 0xe0553f);
 
     if (input.pressed[0]) {
-      const res = place(playerTown, pending, ghostPos.x, ghostPos.z);
+      const res = place(host, pending, ghostPos.x, ghostPos.z);
       if (res.ok) {
         if (!input.keyDown('ShiftLeft') && !input.keyDown('ShiftRight')) cancelPlacement();
       } else {
@@ -2104,12 +2144,20 @@ export function initTown(state) {
     housingCapacity: () => housingCapacity(playerTown),
     growthBlocker: () => growthBlocker(playerTown),
     canAfford: (def) => canAfford(playerTown, def),
-    validate: (def, x, z) => validate(playerTown, def, x, z),
-    place: (def, x, z) => place(playerTown, def, x, z),
+    // Point-resolved rather than fixed to the founding town: see myTownAt.
+    validate: (def, x, z) => validate(myTownFor(x, z), def, x, z),
+    place: (def, x, z) => place(myTownFor(x, z), def, x, z),
     findBuilding: (pred, x, z) => findBuilding(playerTown, pred, x, z),
+    /**
+     * Is this spot in land you hold - ANY of it?
+     *
+     * Also what miracles.js asks before letting you cast, so a town you have
+     * taken is somewhere you may work wonders as well as build. It was your
+     * founding ring alone, which made a captured city a place your own god
+     * could not reach.
+     */
     inInfluence(x, z) {
-      return Math.hypot(x - playerTown.centre.x, z - playerTown.centre.z)
-        <= playerTown.influenceRadius;
+      return !!myTownAt(x, z);
     },
 
     // --- multi-town ---

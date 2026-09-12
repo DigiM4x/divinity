@@ -1322,3 +1322,79 @@ in a raid. That is not a bug - a shrine is a building on your frontier and
 raiders destroy buildings - but it is a real tension worth keeping: the patient
 route is also the exposed one, and a shrine pushed close enough to matter is
 close enough to lose.
+
+---
+
+## A ring you have taken is a ring you can build in
+
+**Reported:** *"once you take a rival's ring you can build inside it since they
+joined you."*
+
+Correct, and the cause was one word repeated in four places. Every placement
+path asked `playerTown` - which is not "a town of yours", it is
+`towns[0]`, the town you **started** in. So capturing a rival gave you its
+land, its people, its buildings and its books, and then refused to let you put
+a single hut inside the ring you had just won. `validate` answered *"outside
+influence"* on ground the island panel was captioning **JOINED YOU**.
+
+Everything needed to fix it already existed, because Phase 20 had made
+ownership a number rather than a boolean:
+
+* `town.owner` is written only by `capture()`
+* `town.resources` already **points at the owning faction's pool**, and capture
+  repoints it - and faction 0's pool *is* `state.resources`, so a captured town
+  was already spending your stockpile. Nothing about money needed touching.
+* `townAt(x, z)` already resolved a point to the town whose ring covers it.
+
+So the change is a `myTownAt(x, z)` - the owner-filtered twin of `townAt` - and
+placement resolving the ground under the cursor instead of assuming the
+founding town. The ghost, the click, the public `validate`/`place`, and
+`inInfluence` all go through it.
+
+**The fallback is deliberately not `playerTown`.** If no town of yours covers
+the spot, `validate` still needs *some* town to answer as, or it cannot say
+"outside influence" - but falling back to the founding town would be wrong in
+the one case that matters: a god who has **lost their first city** and holds two
+others must still be able to build in those two. It falls back to the first town
+you actually hold.
+
+`inInfluence` widening is not only about building: miracles.js asks it before
+letting you cast, so a city you have taken is now somewhere your own god can
+work wonders. It was your founding ring alone, which made a captured town a
+place you could not reach.
+
+Verified through the real preview and the real click:
+
+| | before capture | after capture |
+|---|---|---|
+| `validate` inside their ring | `outside influence` | `''` - buildable |
+| `inInfluence` | false | true |
+| ghost colour | red | green |
+
+...and a click inside the captured ring raised a building that joined **that
+town's** roster, not the founding town's - so its housing and population count
+where they stand. Ashfell went from 1 building to 7 in the minutes after it came
+over, most of it the town self-building *for the player*, which is the capture
+being fully wired rather than anything new.
+
+Edge cases, both right: losing the founding city leaves the other cities
+buildable (the rejection there becomes an ordinary `too close to a building`,
+and since `validate` tests influence *before* spacing, reaching that message
+proves the influence gate passed); and a rival taking a town back makes it
+refuse again immediately, because the gate reads `owner` and nothing caches.
+
+### Two more of the same one-word fault
+
+Having just found it, the twins were worth finding:
+
+* **props.js** - a thrown boulder crushed buildings from `state.town.buildings`,
+  so a rock hurled through a rival's roof bounced off it, and after a capture
+  your own house in your own ring was immune to your own hand.
+* **ui.js** - the debug panel's `buildings` row counted the founding town only,
+  so it under-reported from the moment you took a second city, which is exactly
+  when you are most likely to be reading it.
+
+That getter has now caused this bug four times in two sessions (both attack
+miracles, thrown props, the debug row). It is a getter named `buildings` that
+means *some* of the buildings, and the lesson is the naming: `allBuildings`
+and `buildings` differ by one word and by the entire rest of the map.
